@@ -1,0 +1,12 @@
+jobs:
+  - name: dev-shared-database
+    path: secrets/environments/development/shared/database
+    output: out/dev/.envrc.database
+    prefix: DEV_
+    transform_keys: true
+
+  - name: staging-shared-database
+    path: secrets/environments/staging/shared/database
+    output: out/staging/.envrc.database
+    prefix: STAGING_
+    transform_keys: true

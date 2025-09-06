@@ -1,0 +1,122 @@
+base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}/local
+
+jobs:
+  - name: personal-seed-envrc
+    description: "Environment variables used to seed personal namespace (from Vault)"
+    output: out/personal/seed.envrc
+    format: envrc
+    sections:
+      - name: core
+        description: "Vault identifiers"
+        path: core
+        include_keys: [VAULT_ADDR]
+        transform_keys: false
+
+      - name: google-service-account
+        description: "Google Service Account"
+        path: google
+        env_map:
+          GOOGLE_EMAIL: client_email
+          GOOGLE_PRIVATE_KEY: private_key
+
+      - name: oauth-google
+        description: "Google OAuth client"
+        path: oauth/google
+        include_keys: [client_id, client_secret]
+        prefix: GOOGLE_
+        transform_keys: true
+
+      - name: oauth-slack
+        description: "Slack OAuth client"
+        path: oauth/slack
+        include_keys: [client_id, client_secret]
+        prefix: SLACK_
+        transform_keys: true
+
+      - name: slack-app-id
+        description: "Slack app id (custom name)"
+        path: slack
+        env_map:
+          MANUEL_SLACK_APP_ID: app_id
+
+      - name: slack-app
+        description: "Slack application tokens"
+        path: slack
+        include_keys: [signing_key, app_token, bot_token, client_token, cookie, app_configuration_token, bot_user_id]
+        prefix: SLACK_
+        transform_keys: true
+
+      - name: stytch
+        description: "Stytch project"
+        path: stytch
+        include_keys: [env, project_id, secret, public_token]
+        prefix: STYTCH_
+        transform_keys: true
+
+      - name: providers-openai
+        description: "OpenAI provider API key"
+        path: providers/openai
+        include_keys: [api_key]
+        prefix: OPENAI_
+        transform_keys: true
+
+      - name: providers-anthropic
+        description: "Anthropic provider API key"
+        path: providers/anthropic
+        include_keys: [api_key]
+        prefix: ANTHROPIC_
+        transform_keys: true
+
+      - name: digitalocean
+        description: "DigitalOcean personal token"
+        path: digitalocean
+        include_keys: [access_token]
+        prefix: DIGITALOCEAN_
+        transform_keys: true
+
+      - name: spaces
+        description: "Spaces (S3-compatible) credentials"
+        path: spaces
+        include_keys: [access_key_id, secret_access_key]
+        prefix: SPACES_
+        transform_keys: true
+
+      - name: langfuse
+        description: "Langfuse instrumentation"
+        path: langfuse
+        include_keys: [host, secret_key, public_key]
+        prefix: LANGFUSE_
+        transform_keys: true
+
+      - name: elasticsearch
+        description: "Personal Elasticsearch connection"
+        path: elasticsearch
+        include_keys: [url, username, password]
+        prefix: ELASTICSEARCH_
+        transform_keys: true
+
+      - name: escuse-me
+        description: "ESCUSE-ME app specific configuration"
+        path: escuse-me
+        include_keys: [username, password, addresses, embeddings_type, embeddings_engine, embeddings_dimensions, openai_api_key]
+        prefix: ESCUSE_ME_
+        transform_keys: true
+
+      - name: infra
+        description: "Misc infrastructure"
+        path: infra
+        include_keys: [ngrok_host]
+        transform_keys: true
+
+      - name: redis-base
+        description: "Redis connection URL"
+        path: redis
+        include_keys: [url]
+        prefix: REDIS_
+        transform_keys: true
+
+      - name: analytics
+        description: "Analytics and misc providers"
+        path: analytics
+        include_keys: [mixpanel_token, tavily_api_key]
+        transform_keys: true

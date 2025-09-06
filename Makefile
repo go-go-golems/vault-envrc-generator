@@ -46,14 +46,14 @@ tag-patch:
 
 release:
 	git push origin --tags
-	GOPROXY=proxy.golang.org go list -m github.com/go-go-golems/XXX@$(shell svu current)
+	GOPROXY=proxy.golang.org go list -m github.com/go-go-golems/vault-envrc-generator@$(shell svu current)
 
 bump-glazed:
 	go get github.com/go-go-golems/glazed@latest
 	go get github.com/go-go-golems/clay@latest
 	go mod tidy
 
-XXX_BINARY=$(shell which XXX)
+VAULT_BINARY=$(shell which vault-envrc-generator)
 install:
-	go build -o ./dist/XXX ./cmd/XXX && \
-		cp ./dist/XXX $(XXX_BINARY)
+	go build -o ./dist/vault-envrc-generator ./cmd/vault-envrc-generator && \
+		cp ./dist/vault-envrc-generator $(VAULT_BINARY)

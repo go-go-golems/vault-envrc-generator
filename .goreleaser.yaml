@@ -8,9 +8,7 @@ before:
     # you may remove this if you don't need go generate
     - go generate ./...
 builds:
-  - env:
-      - CGO_ENABLED=0
-    main: ./cmd/vault-envrc-generator
+  - main: ./cmd/vault-envrc-generator
     binary: vault-envrc-generator
     goos:
       - linux

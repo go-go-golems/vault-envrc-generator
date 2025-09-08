@@ -1,12 +1,13 @@
 ---
 Title: Getting Started — Vault Envrc Generator
-Slug: vault-envrc-getting-started
-Short: Build, configure, and run core workflows with Glazed
+Slug: getting-started
+Short: Complete guide to installation, configuration, and practical workflows for secret management
 Topics:
 - tutorial
 - quick-start
-- glazed
-- vault
+- installation
+- configuration
+- workflows
 IsTemplate: false
 IsTopLevel: true
 ShowPerDefault: true
@@ -15,711 +16,676 @@ SectionType: Tutorial
 
 # Getting Started — Vault Envrc Generator
 
-This comprehensive guide walks through building the CLI, configuring Vault settings and logging, and running common workflows using Glazed layers and structured outputs. By the end of this guide, you'll understand how to effectively use all five commands and integrate the tool into your development workflow.
+The Vault Envrc Generator transforms HashiCorp Vault secrets into environment variables and configuration files through a simple, configuration-driven approach. This guide takes you from installation through practical workflows, showing you how to extract secrets from Vault and generate the exact configuration formats your applications need.
 
-## Prerequisites
+## What You'll Learn
 
-Before getting started, ensure you have:
-- **Go 1.21+** installed for building the application
-- **HashiCorp Vault** instance accessible (local or remote)
-- **Valid Vault token** with appropriate permissions
-- **Basic understanding** of environment variables and shell scripting
+By the end of this guide, you'll understand how to:
+- **Install and configure** the tool for your environment
+- **Connect to Vault** using multiple authentication methods
+- **Extract secrets** from single paths for quick tasks
+- **Process multiple paths** using batch configurations
+- **Generate different formats** (envrc, JSON, YAML) for various use cases
+- **Integrate the tool** into development and deployment workflows
 
-## Quick Start Summary
+## Prerequisites and Setup
 
-For experienced users, here's the essential workflow:
+Before starting, ensure you have the necessary components and access:
+
+**Required:**
+- **Go 1.21+** for building from source
+- **HashiCorp Vault instance** (local development server or production cluster)
+- **Valid Vault token** with read access to your target secret paths
+- **Command-line experience** with environment variables and basic shell operations
+
+**Optional but Recommended:**
+- **direnv** for automatic environment loading
+- **jq** for JSON processing and token manipulation
+- **vault CLI** for additional Vault operations
+
+## Installation
+
+The tool can be installed through multiple methods depending on your environment and preferences.
+
+### Method 1: Download Pre-built Binaries
+
+Pre-built binaries are available for Linux, macOS, and Windows:
+
 ```bash
-# Build
-GOCACHE=$(pwd)/.gocache go build -o vault-envrc-generator .
+# Download latest release for your platform
+curl -L https://github.com/go-go-golems/vault-envrc-generator/releases/latest/download/vault-envrc-generator_linux_amd64.tar.gz | tar xz
 
-# Configure Vault access (choose one method)
-export VAULT_ADDR=https://vault.example.com
-export VAULT_TOKEN=your_token_here
-# OR use token file: echo "your_token" > ~/.vault-token
+# Make executable and add to PATH
+chmod +x vault-envrc-generator
+sudo mv vault-envrc-generator /usr/local/bin/
 
-# Generate environment file
-./vault-envrc-generator batch -c your-config.yaml --output .envrc
-source .envrc
+# Verify installation
+vault-envrc-generator --version
 ```
 
-## 1) Build the application
+### Method 2: Install via Package Managers
 
-The application uses Go modules and can be built with a simple go build command:
+**Homebrew (macOS/Linux):**
+```bash
+brew install go-go-golems/tap/vault-envrc-generator
+```
+
+**Debian/Ubuntu:**
+```bash
+# Add repository and install
+curl -s https://packagecloud.io/install/repositories/go-go-golems/main/script.deb.sh | sudo bash
+sudo apt-get install vault-envrc-generator
+```
+
+### Method 3: Build from Source
+
+Building from source gives you the latest features and allows customization:
 
 ```bash
-cd vibes/2025-09-04/github.com/go-go-golems/vault-envrc-generator/go-utility
+# Clone repository
+git clone https://github.com/go-go-golems/vault-envrc-generator.git
+cd vault-envrc-generator
 
-# Build with custom cache directory (recommended)
-GOCACHE=$(pwd)/.gocache go build -o vault-envrc-generator .
+# Build with optimizations
+go build -ldflags "-w -s" -o vault-envrc-generator ./cmd/vault-envrc-generator
 
-# Verify the build
+# Verify build
 ./vault-envrc-generator --help
-./vault-envrc-generator --version
 ```
 
-**Build Options:**
-- **Custom Cache**: `GOCACHE=$(pwd)/.gocache` uses local cache for faster rebuilds
-- **Static Binary**: Add `-ldflags "-w -s"` for smaller binary size
-- **Cross Compilation**: Use `GOOS=linux GOARCH=amd64` for different platforms
+**Build Optimization Options:**
+- `-ldflags "-w -s"` reduces binary size by stripping debug information
+- `GOCACHE=$(pwd)/.gocache` uses local cache for faster rebuilds
+- Cross-compilation: `GOOS=linux GOARCH=amd64 go build`
 
-**Troubleshooting Build Issues:**
-- Ensure Go 1.21+ is installed: `go version`
-- Clear module cache if needed: `go clean -modcache`
-- Update dependencies: `go mod tidy && go mod download`
+## Vault Connection Configuration
 
-## 2) Configure Vault Connection & Authentication
+The tool provides flexible authentication options to work with different Vault deployments and security requirements. Understanding these options is crucial for smooth operation.
 
-The application provides multiple ways to configure Vault connectivity, allowing flexibility across different environments and security requirements.
+### Connection Parameters
 
-### **Vault Connection Parameters**
+The tool needs two pieces of information to connect to Vault:
 
-#### **Core Connection Settings**
-- `--vault-addr`: Vault server address (default: `http://127.0.0.1:8200`)
-- `--vault-token`: Explicit token (overrides other sources)
-- `--vault-token-source`: Token resolution strategy (`auto|env|file|lookup`)
-- `--vault-token-file`: Custom token file path
+**1. Vault Address** - Where your Vault server is located
+**2. Authentication Token** - Proof of your identity and permissions
 
-#### **Token Resolution Strategies**
+### Vault Address Configuration
 
-**1. Auto Mode (Default)**
+Set your Vault server address using any of these methods:
+
 ```bash
-# Auto-discovers token from multiple sources in order:
-# 1. --vault-token flag
-# 2. VAULT_TOKEN environment variable  
-# 3. ~/.vault-token file
-# 4. Vault agent socket (if available)
-./vault-envrc-generator list --path secrets/ --vault-token-source auto
-```
-
-**2. Environment Variable**
-```bash
-export VAULT_TOKEN=hvs.your_token_here
-./vault-envrc-generator list --path secrets/ --vault-token-source env
-```
-
-**3. Token File**
-```bash
-echo "hvs.your_token_here" > ~/.vault-token
-# OR custom file:
-echo "hvs.your_token_here" > /path/to/custom-token
-./vault-envrc-generator list --path secrets/ \
-  --vault-token-source file --vault-token-file /path/to/custom-token
-```
-
-**4. Explicit Token**
-```bash
-./vault-envrc-generator list --path secrets/ \
-  --vault-token hvs.your_token_here
-```
-
-### **Environment Variables**
-The application respects standard Vault environment variables:
-```bash
+# Method 1: Environment variable (recommended for consistency)
 export VAULT_ADDR=https://vault.company.com:8200
-export VAULT_TOKEN=hvs.your_token_here
-export VAULT_CACERT=/path/to/ca.pem        # For TLS verification
-export VAULT_CLIENT_CERT=/path/to/cert.pem # For mTLS
-export VAULT_CLIENT_KEY=/path/to/key.pem   # For mTLS
+
+# Method 2: Command-line flag (overrides environment)
+vault-envrc-generator list --vault-addr https://vault.company.com:8200 --path secrets/
+
+# Method 3: Configuration file (for complex setups)
+echo "vault_addr: https://vault.company.com:8200" > ~/.vault-config.yaml
 ```
 
-### **Connection Verification**
-Test your connection before proceeding:
-```bash
-# Basic connectivity test
-./vault-envrc-generator list --path secrets/ --depth 0
+**Common Address Formats:**
+- Local development: `http://127.0.0.1:8200`
+- HTTPS with custom port: `https://vault.company.com:8200`
+- HTTPS with standard port: `https://vault.company.com`
 
-# Detailed connection info with debug logging
-./vault-envrc-generator --log-level debug \
-  list --path secrets/ --depth 0 --vault-addr https://vault.example.com
+### Token Authentication Methods
+
+The tool supports multiple token resolution strategies, automatically trying different sources until it finds a valid token.
+
+#### Automatic Token Discovery (Recommended)
+
+The default `auto` mode tries token sources in this order:
+
+1. Command-line `--vault-token` flag
+2. `VAULT_TOKEN` environment variable
+3. `~/.vault-token` file
+4. Vault agent socket (if available)
+
+```bash
+# Set up token via environment variable
+export VAULT_TOKEN=hvs.CAESIGqjzSuHYTLSaI...
+
+# Tool automatically discovers and uses the token
+vault-envrc-generator list --path secrets/app
 ```
 
-## 3) Configure Logging & Observability
+#### Environment Variable Method
 
-The application uses **zerolog** for structured, high-performance logging with multiple configuration options.
+For development and CI/CD environments:
 
-### **Logging Configuration**
-
-#### **Log Levels**
-- `trace`: Extremely detailed execution flow (use sparingly)
-- `debug`: Detailed internal operations and API calls
-- `info`: High-level operations and progress (default)
-- `warn`: Recoverable issues and fallback operations
-- `error`: Failed operations requiring attention
-- `fatal`: Unrecoverable errors that terminate execution
-
-#### **Log Formats**
-- `text`: Human-readable format (default)
-- `json`: Machine-readable structured format
-
-#### **Log Destinations**
-- Default: stderr (doesn't interfere with stdout output)
-- File: `--log-file /path/to/logfile.log`
-
-### **Logging Examples**
-
-**Development/Debugging:**
 ```bash
-# Detailed debugging with human-readable format
-./vault-envrc-generator --log-level debug --log-format text \
-  batch -c config.yaml --dry-run
+# Set token in environment
+export VAULT_TOKEN=hvs.CAESIGqjzSuHYTLSaI...
 
-# Trace-level logging to file
-./vault-envrc-generator --log-level trace --log-file debug.log \
-  seed -c seed.yaml --dry-run
+# Explicitly use environment token
+vault-envrc-generator generate --path secrets/database \
+  --vault-token-source env --format envrc
 ```
 
-**Production/Monitoring:**
+#### Token File Method
+
+For persistent local development:
+
 ```bash
-# Structured JSON logs for log aggregation
-./vault-envrc-generator --log-level info --log-format json \
-  batch -c prod-config.yaml --output /etc/app/env
+# Save token to file
+echo "hvs.CAESIGqjzSuHYTLSaI..." > ~/.vault-token
+
+# Use token file explicitly
+vault-envrc-generator generate --path secrets/api \
+  --vault-token-source file --format json
 ```
 
-**CI/CD Pipelines:**
+#### Custom Token File
+
+For multiple environments or shared systems:
+
 ```bash
-# Minimal logging for clean CI output
-./vault-envrc-generator --log-level warn \
-  generate --path secrets/ci/app --output ci.envrc
+# Save environment-specific token
+echo "hvs.DEV_TOKEN..." > ~/.vault-tokens/development
+
+# Use custom token file
+vault-envrc-generator batch --config dev.yaml \
+  --vault-token-file ~/.vault-tokens/development
 ```
 
-## 4) Single Path Generation (`generate` command)
+### Connection Verification
 
-The `generate` command is perfect for quick secret extraction and simple use cases. It focuses on a single Vault path and provides flexible output options.
+Before processing secrets, verify your connection works:
 
-### **Basic Usage Patterns**
-
-#### **Preview Without Writing Files**
 ```bash
-# Preview envrc format to stdout
-./vault-envrc-generator generate \
-  --path secrets/environments/development/shared/database \
-  --format envrc --dry-run
+# Test connection and permissions
+vault-envrc-generator list --path secrets/ --vault-addr $VAULT_ADDR
 
-# Preview with key transformation
-./vault-envrc-generator generate \
+# Expected output: list of available secret paths
+# If this fails, check your address and token configuration
+```
+
+**Troubleshooting Connection Issues:**
+
+**"connection refused" errors:**
+- Verify Vault address is correct and accessible
+- Check if Vault server is running
+- Confirm network connectivity and firewall rules
+
+**"permission denied" errors:**
+- Verify token has read permissions for target paths
+- Check token expiration: `vault token lookup`
+- Ensure you're using the correct Vault namespace (if applicable)
+
+**"invalid token" errors:**
+- Token may be expired or revoked
+- Regenerate token: `vault auth` or request new token
+- Verify token format (should start with `hvs.` for Vault 1.10+)
+
+## Your First Secret Extraction
+
+Let's start with a simple example to verify everything works correctly.
+
+### Step 1: Explore Available Secrets
+
+First, see what secrets are available in your Vault:
+
+```bash
+# List top-level secret paths
+vault-envrc-generator list --path secrets/
+
+# Explore a specific path
+vault-envrc-generator list --path secrets/app/
+
+# Show secret values (use carefully!)
+vault-envrc-generator list --path secrets/app/database --show-values
+```
+
+### Step 2: Extract a Single Secret Path
+
+Use the `generate` command for quick secret extraction:
+
+```bash
+# Generate environment variables from database secrets
+vault-envrc-generator generate \
+  --path secrets/app/database \
+  --format envrc \
+  --output database.envrc
+
+# Review the generated file
+cat database.envrc
+```
+
+**Expected Output:**
+```bash
+# Generated by vault-envrc-generator
+export DATABASE_HOST="postgres.company.com"
+export DATABASE_PORT="5432"
+export DATABASE_NAME="myapp"
+export DATABASE_USER="app_user"
+export DATABASE_PASSWORD="secure_password_123"
+```
+
+### Step 3: Load and Use Environment Variables
+
+```bash
+# Load environment variables
+source database.envrc
+
+# Verify variables are set
+echo $DATABASE_HOST
+echo $DATABASE_PORT
+
+# Use in your application
+psql postgresql://$DATABASE_USER:$DATABASE_PASSWORD@$DATABASE_HOST:$DATABASE_PORT/$DATABASE_NAME
+```
+
+### Step 4: Generate Different Formats
+
+The same secrets can be output in different formats for various use cases:
+
+```bash
+# JSON for API consumption
+vault-envrc-generator generate \
+  --path secrets/app/database \
+  --format json \
+  --sort-keys \
+  --output database.json
+
+# YAML for configuration files
+vault-envrc-generator generate \
+  --path secrets/app/database \
+  --format yaml \
+  --sort-keys \
+  --output database.yaml
+
+# Review different formats
+cat database.json
+cat database.yaml
+```
+
+## Key Transformation and Filtering
+
+Real-world secret management often requires transforming key names and filtering sensitive data.
+
+### Key Transformation
+
+Transform Vault key names to standard environment variable format:
+
+```bash
+# Transform keys to UPPERCASE and replace hyphens with underscores
+vault-envrc-generator generate \
   --path secrets/app/api-keys \
-  --format envrc --transform-keys --prefix "MYAPP_" --dry-run
+  --transform-keys \
+  --format envrc
+
+# Add prefix to avoid naming conflicts
+vault-envrc-generator generate \
+  --path secrets/shared/redis \
+  --prefix "REDIS_" \
+  --transform-keys \
+  --format envrc
 ```
 
-#### **Generate Configuration Files**
-```bash
-# Generate JSON configuration
-./vault-envrc-generator generate \
-  --path secrets/providers/openai \
-  --format json --sort-keys \
-  --output config/openai.json
+**Transformation Examples:**
+- `api-key` → `API_KEY`
+- `client-id` → `CLIENT_ID`
+- `oauth_token` → `OAUTH_TOKEN`
+- With prefix `REDIS_`: `host` → `REDIS_HOST`
 
-# Generate YAML for Kubernetes secrets
-./vault-envrc-generator generate \
-  --path secrets/k8s/app-secrets \
-  --format yaml --sort-keys \
-  --output k8s/app-secrets.yaml
-```
+### Key Filtering
 
-#### **Key Filtering and Transformation**
+Filter secrets to include only what your application needs:
+
 ```bash
 # Include only specific keys
-./vault-envrc-generator generate \
-  --path secrets/database \
-  --include-keys "host,port,database,username,password" \
-  --format envrc --output db.envrc
+vault-envrc-generator generate \
+  --path secrets/app/database \
+  --include host,port,database,username,password \
+  --format envrc
 
 # Exclude sensitive keys for development
-./vault-envrc-generator generate \
+vault-envrc-generator generate \
   --path secrets/app/config \
-  --exclude-keys "*_prod,*_production" \
-  --format envrc --transform-keys
+  --exclude "*_prod,*_production,admin_*" \
+  --format envrc
 
-# Add service prefix to avoid conflicts
-./vault-envrc-generator generate \
-  --path secrets/shared/redis \
-  --prefix "REDIS_" --transform-keys \
-  --format envrc --output redis.envrc
+# Combine filtering with transformation
+vault-envrc-generator generate \
+  --path secrets/api/oauth \
+  --include client_id,client_secret \
+  --prefix "OAUTH_" \
+  --transform-keys \
+  --format envrc
 ```
 
-### **Real-World Examples**
+## Batch Processing for Complex Workflows
 
-Based on the successful run we performed earlier, here are practical examples:
+The `batch` command processes multiple secret paths with sophisticated configuration, making it ideal for complex applications and multi-environment setups.
 
-#### **Database Configuration**
-```bash
-# Generate database environment variables
-./vault-envrc-generator generate \
-  --path secrets/environments/development/personal/$(vault token lookup -format=json | jq -r .data.meta.oidc_user_id)/local/db \
-  --format envrc --output db.envrc
+### Understanding Batch Configuration
 
-# Result: exports for DATABASE_URL, DB_HOST, DB_PASSWORD, etc.
-```
-
-#### **API Keys and Tokens**
-```bash
-# OpenAI API configuration
-./vault-envrc-generator generate \
-  --path secrets/providers/openai \
-  --prefix "OPENAI_" --transform-keys \
-  --format envrc --output openai.envrc
-
-# Multiple provider APIs as JSON
-./vault-envrc-generator generate \
-  --path secrets/providers/anthropic \
-  --format json --sort-keys \
-  --output providers/anthropic.json
-```
-
-## 5) Batch Processing (`batch` command)
-
-The `batch` command is the most powerful feature, allowing you to process multiple Vault paths with complex configurations. Based on our successful test run, here's how to use it effectively.
-
-### **Understanding Batch Configuration**
-
-A batch configuration file defines jobs with multiple sections. Here's the structure we successfully tested:
+Batch processing uses YAML configuration files to define complex workflows. Here's a practical example:
 
 ```yaml
-# batch-personal.yaml (simplified)
-base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}/local
+# app-config.yaml
+base_path: secrets/environments/production/app
 
 jobs:
-  - name: personal-seed-envrc
-    description: "Environment variables from personal Vault namespace"
-    output: out/personal/seed.envrc
+  - name: database-config
+    description: "Database connection settings"
+    output: config/database.envrc
     format: envrc
     sections:
-      - name: google-service-account
-        description: "Google Service Account"
-        path: google
-        env_map:
-          GOOGLE_EMAIL: client_email
-          GOOGLE_PRIVATE_KEY: private_key
+      - name: primary-db
+        path: database/primary
+        prefix: DB_PRIMARY_
+        transform_keys: true
+        include_keys: [host, port, database, username, password]
       
-      - name: oauth-google
-        description: "Google OAuth client"
-        path: oauth/google
-        include_keys: [client_id, client_secret]
-        prefix: GOOGLE_
+      - name: replica-db
+        path: database/replica
+        prefix: DB_REPLICA_
+        transform_keys: true
+        include_keys: [host, port, database, username, password]
+
+  - name: api-keys
+    description: "External service API keys"
+    output: config/api-keys.json
+    format: json
+    sort_keys: true
+    sections:
+      - name: openai
+        path: providers/openai
+        prefix: OPENAI_
+        transform_keys: true
+      
+      - name: stripe
+        path: providers/stripe
+        prefix: STRIPE_
         transform_keys: true
 ```
 
-### **Basic Batch Operations**
+### Running Batch Operations
 
-#### **Preview Mode (Dry Run)**
+Execute batch configurations with flexible options:
+
 ```bash
-# Preview what would be generated (stdout)
-./vault-envrc-generator batch -c batch-personal.yaml \
-  --dry-run --format envrc
+# Process complete configuration
+vault-envrc-generator batch --config app-config.yaml
 
-# Preview as JSON for inspection
-./vault-envrc-generator batch -c batch-personal.yaml \
-  --dry-run --format json --output -
+# Preview without writing files
+vault-envrc-generator batch --config app-config.yaml --dry-run
+
+# Override output directory
+vault-envrc-generator batch --config app-config.yaml --output /tmp/test-config
+
+# Continue processing on errors
+vault-envrc-generator batch --config app-config.yaml --continue-on-error
 ```
 
-#### **Generate Environment Files**
-```bash
-# Generate complete environment file
-./vault-envrc-generator batch -c batch-personal.yaml
+### Multi-Environment Configurations
 
-# Override output location
-./vault-envrc-generator batch -c batch-personal.yaml \
-  --output .envrc
+Create environment-specific configurations using templates:
 
-# Generate in different format
-./vault-envrc-generator batch -c batch-personal.yaml \
-  --format json --output config.json
+```yaml
+# multi-env.yaml
+base_path: secrets/environments/{{ .Token.Meta.environment }}/app
+
+jobs:
+  - name: app-config
+    output: config/{{ .Token.Meta.environment }}.envrc
+    format: envrc
+    sections:
+      - name: database
+        path: database
+        prefix: DB_
+        transform_keys: true
+      
+      - name: cache
+        path: redis
+        prefix: REDIS_
+        transform_keys: true
 ```
 
-### **Output Semantics**
+**Template Variables Available:**
+- `{{ .Token.OIDCUserID }}` - User identifier from OIDC tokens
+- `{{ .Token.DisplayName }}` - Human-readable token name
+- `{{ .Token.Meta.environment }}` - Environment from token metadata
+- `{{ .Token.Meta.team }}` - Team from token metadata
 
-- Envrc: sections are appended to the target file with headers; when writing to an existing file, the global header is suppressed by default to avoid duplication.
-- JSON/YAML: shallow merge of top-level keys into the target file; use `--sort-keys` for deterministic key ordering.
+## Advanced Features
 
-### **Advanced Batch Features**
+### Environment Variable Mapping
 
-#### **Section Types and Configuration**
+Map Vault keys directly to specific environment variable names:
 
-From our successful test run, here are the key section configuration patterns:
-
-**1. Environment Mapping (`env_map`)**
 ```yaml
 sections:
-  - name: custom-mapping
-    path: slack
+  - name: service-account
+    path: google/service-account
     env_map:
-      MANUEL_SLACK_APP_ID: app_id  # Custom variable name
-      SLACK_BOT_TOKEN: bot_token   # Direct mapping
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: client_email
+      GOOGLE_PRIVATE_KEY: private_key
+      GOOGLE_PROJECT_ID: project_id
 ```
 
-**2. Key Filtering and Transformation**
+### Static Value Injection
+
+Add configuration constants to your output:
+
 ```yaml
 sections:
-  - name: filtered-keys
-    path: oauth/google
-    include_keys: [client_id, client_secret]  # Only these keys
-    prefix: GOOGLE_                           # Add prefix
-    transform_keys: true                      # Uppercase & underscore
+  - name: app-metadata
+    path: app/secrets
+    fixed:
+      APP_VERSION: "1.2.3"
+      ENVIRONMENT: "production"
+      DEBUG: "false"
 ```
 
-**3. Mixed Configuration**
-```yaml
-sections:
-  - name: redis-base
-    path: redis
-    include_keys: [url]
-    prefix: REDIS_
-    transform_keys: true
-    
-  - name: redis-mento
-    path: redis  # Same path, different processing
-    include_keys: [server_addr, database]
-    prefix: MENTO_SERVICE_REDIS_
-    transform_keys: true
-```
+### Custom Templates
 
-### **Real-World Batch Examples**
+Use custom templates for specialized output formats:
 
-Based on our successful test with 19 sections processing various services:
-
-#### **Complete Development Environment**
 ```bash
-# Generate complete development environment
-./vault-envrc-generator batch -c batch-personal.yaml \
-  --output .envrc
+# Create custom template
+cat > custom.tmpl << 'EOF'
+{{- range $key, $value := . }}
+{{ $key }}={{ $value | quote }}
+{{- end }}
+EOF
 
-# Source the generated environment
-source .envrc
-
-# Verify variables are loaded
-echo $GOOGLE_CLIENT_ID
-echo $OPENAI_API_KEY
+# Use custom template
+vault-envrc-generator generate \
+  --path secrets/app/config \
+  --template custom.tmpl \
+  --output app.conf
 ```
 
-#### **Service-Specific Configurations**
+## Integration Workflows
+
+### Development Workflow
+
+Set up automatic environment loading for development:
+
 ```bash
-# Generate only database configuration
-./vault-envrc-generator batch -c batch-database.yaml \
-  --format json --output db-config.json
+# Create development configuration
+cat > dev-config.yaml << 'EOF'
+base_path: secrets/environments/development
+jobs:
+  - name: dev-env
+    output: .envrc
+    format: envrc
+    sections:
+      - path: database
+        prefix: DB_
+      - path: api-keys
+        transform_keys: true
+EOF
 
-# Generate Kubernetes secrets
-./vault-envrc-generator batch -c batch-k8s.yaml \
-  --format yaml --output k8s-secrets.yaml
+# Generate environment file
+vault-envrc-generator batch --config dev-config.yaml
+
+# Use with direnv for automatic loading
+echo "source .envrc" >> .envrc
+direnv allow
 ```
 
-#### **Multi-Environment Processing**
+### CI/CD Pipeline Integration
+
+Integrate secret extraction into deployment pipelines:
+
 ```bash
-# Development environment
-./vault-envrc-generator batch -c batch-config.yaml \
-  --base-path secrets/environments/development \
-  --output dev.envrc
+#!/bin/bash
+# deploy.sh
 
-# Production environment  
-./vault-envrc-generator batch -c batch-config.yaml \
-  --base-path secrets/environments/production \
-  --output prod.envrc
+# Extract production secrets
+vault-envrc-generator batch --config production.yaml --output /tmp/secrets
+
+# Load secrets for deployment
+source /tmp/secrets/app.envrc
+
+# Deploy application with secrets
+docker run --env-file /tmp/secrets/app.env myapp:latest
+
+# Clean up secrets
+rm -rf /tmp/secrets
 ```
 
-##  b6) Vault Exploration (`list` command)
+### Kubernetes Integration
 
-The `list` command provides powerful Vault exploration and auditing capabilities with Glazed's structured output formats.
-
-### **Basic Listing Operations**
-
-#### **Directory Structure Exploration**
-```bash
-# List top-level directories
-./vault-envrc-generator list --path secrets/ --depth 1 --output table
-
-# Explore development environment structure  
-./vault-envrc-generator list \
-  --path secrets/environments/development/ \
-  --depth 2 --output json
-
-# Deep exploration with depth limit
-./vault-envrc-generator list \
-  --path secrets/environments/ \
-  --depth 3 --output yaml
-```
-
-#### **Different Output Formats**
-```bash
-# Human-readable table format
-./vault-envrc-generator list --path secrets/providers/ \
-  --depth 1 --output table
-
-# JSON for programmatic processing
-./vault-envrc-generator list --path secrets/apps/ \
-  --depth 2 --output json > vault-inventory.json
-
-# CSV for spreadsheet import
-./vault-envrc-generator list --path secrets/ \
-  --depth 1 --output csv > vault-structure.csv
-
-# YAML for documentation
-./vault-envrc-generator list --path secrets/environments/ \
-  --depth 2 --output yaml > environments.yaml
-```
-
-### **Value Inspection and Security**
-
-#### **Include Values with Censoring**
-```bash
-# Show censored values for structure understanding
-./vault-envrc-generator list --path secrets/database/ \
-  --include-values --censor "***REDACTED***" \
-  --output yaml
-
-# Different censoring patterns
-./vault-envrc-generator list --path secrets/api-keys/ \
-  --include-values --censor "sk-...HIDDEN" \
-  --output table
-
-# JSON with censored values for documentation
-./vault-envrc-generator list --path secrets/oauth/ \
-  --include-values --censor "XXXXX" \
-  --output json > oauth-structure.json
-```
-
-### **Audit and Documentation Use Cases**
-
-#### **Security Audit**
-```bash
-# Generate complete Vault inventory
-./vault-envrc-generator list --path secrets/ \
-  --depth 5 --output json > vault-audit-$(date +%Y%m%d).json
-
-# Check specific environment access
-./vault-envrc-generator list \
-  --path secrets/environments/production/ \
-  --depth 3 --include-values --censor "***" \
-  --output yaml
-```
-
-#### **Access Verification**
-```bash
-# Test read access to all paths
-./vault-envrc-generator list --path secrets/ \
-  --depth 2 --output table
-
-# Verify specific service access
-./vault-envrc-generator list --path secrets/services/myapp/ \
-  --include-values --censor "..." --output json
-```
-
-## 7) Vault Population (`seed` command)
-
-The `seed` command populates Vault from local sources. Based on our successful test with 17 different paths, here's how to use it effectively.
-
-### **Understanding Seed Configuration**
-
-From our successful test, the seed configuration supports multiple data sources:
+Generate Kubernetes secret manifests:
 
 ```yaml
-# seed-personal.yaml (simplified)
-base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}/local
-
-sets:
-  - path: core
-    env:
-      OP_ACCOUNT: OP_ACCOUNT          # From environment variable
-      VAULT_ADDR: VAULT_ADDR
+# k8s-secrets.yaml
+jobs:
+  - name: app-secrets
+    output: k8s/app-secrets.yaml
+    format: yaml
+    sections:
+      - name: database
+        path: app/database
+        include_keys: [host, port, database, username, password]
       
-  - path: google
-    env:
-      client_email: GOOGLE_EMAIL       # Map env var to vault key
-      private_key: GOOGLE_PRIVATE_KEY
-      
-  - path: db
-    data:                              # Static data
-      type: postgres
-      username: postgres
-      password: your_password_here
-      server: localhost
-      port: "5432"
+      - name: api-keys
+        path: app/api-keys
+        transform_keys: true
 ```
-
-### **Seed Operations**
-
-#### **Preview Mode (Dry Run)**
-```bash
-# See what would be written to Vault
-./vault-envrc-generator seed -c seed-personal.yaml --dry-run
-
-# With debug logging to see detailed operations
-./vault-envrc-generator --log-level debug \
-  seed -c seed-personal.yaml --dry-run
-```
-
-#### **Actual Seeding**
-```bash
-# Populate Vault with secrets
-./vault-envrc-generator seed -c seed-personal.yaml
-
-# Seed with custom base path
-./vault-envrc-generator seed -c seed.yaml \
-  --base-path secrets/environments/staging
-```
-
-### **Data Source Types**
-
-From our successful test, here are the three data source types:
-
-#### **Environment Variables (`env`)**
-```yaml
-sets:
-  - path: api-keys
-    env:
-      openai_key: OPENAI_API_KEY      # Vault key: env var
-      anthropic_key: ANTHROPIC_API_KEY
-```
-
-#### **Static Data (`data`)**
-```yaml
-sets:
-  - path: database
-    data:
-      host: localhost
-      port: "5432"
-      ssl_mode: disable
-```
-
-#### **File Contents (`files`)**
-```yaml
-sets:
-  - path: certificates
-    files:
-      ca_cert: /path/to/ca.pem        # File content as value
-      client_cert: /path/to/client.pem
-```
-
-### **Real-World Seeding Examples**
-
-#### **Development Environment Bootstrap**
-```bash
-# Set up complete development environment
-./vault-envrc-generator seed -c dev-bootstrap.yaml --dry-run
-./vault-envrc-generator seed -c dev-bootstrap.yaml
-
-# Verify seeding worked
-./vault-envrc-generator list --path secrets/environments/development/ \
-  --depth 2 --output table
-```
-
-#### **Service Migration**
-```bash
-# Migrate secrets from old system
-./vault-envrc-generator seed -c migration.yaml --dry-run
-./vault-envrc-generator seed -c migration.yaml
-
-# Generate new environment files
-./vault-envrc-generator batch -c batch-migrated.yaml --output .envrc
-```
-
-## 8) Quick Exploration (`interactive` command)
-
-Perfect for learning and ad-hoc exploration:
 
 ```bash
-# Interactive exploration and generation
-./vault-envrc-generator interactive
-
-# Follow the prompts to:
-# 1. Choose Vault path
-# 2. Select include/exclude patterns
-# 3. Configure prefix and transformation
-# 4. Choose output format
-# 5. Preview and save results
-```
-
-## 9) Integration Patterns & Workflows
-
-### **Development Workflow**
-```bash
-# 1. Bootstrap development secrets
-./vault-envrc-generator seed -c dev-seed.yaml --dry-run
-./vault-envrc-generator seed -c dev-seed.yaml
-
-# 2. Generate development environment
-./vault-envrc-generator batch -c dev-batch.yaml --output .envrc
-
-# 3. Load environment and start development
-source .envrc
-npm run dev
-```
-
-### **CI/CD Integration**
-```bash
-# Generate environment for CI
-./vault-envrc-generator batch -c ci-config.yaml \
-  --format json --output ci-secrets.json
-
 # Generate Kubernetes secrets
-./vault-envrc-generator batch -c k8s-config.yaml \
-  --format yaml --output k8s-secrets.yaml
-kubectl apply -f k8s-secrets.yaml
+vault-envrc-generator batch --config k8s-secrets.yaml
+
+# Apply to cluster
+kubectl apply -f k8s/app-secrets.yaml
 ```
 
-### **Multi-Environment Management**
+## Troubleshooting Common Issues
+
+### Connection Problems
+
+**Issue: "connection refused"**
 ```bash
-# Development
-./vault-envrc-generator batch -c app-config.yaml \
-  --base-path secrets/environments/development \
-  --output dev.envrc
+# Check Vault address
+echo $VAULT_ADDR
+curl -k $VAULT_ADDR/v1/sys/health
 
-# Staging  
-./vault-envrc-generator batch -c app-config.yaml \
-  --base-path secrets/environments/staging \
-  --output staging.envrc
-
-# Production
-./vault-envrc-generator batch -c app-config.yaml \
-  --base-path secrets/environments/production \
-  --output prod.envrc
+# Test with explicit address
+vault-envrc-generator list --vault-addr http://127.0.0.1:8200 --path secrets/
 ```
 
-## Best Practices & Tips
-
-### **Configuration Management**
-- **Version Control**: Keep seed and batch configs in git
-- **Environment Separation**: Use different configs for dev/staging/prod
-- **Template Paths**: Use Go templates for dynamic path construction
-- **Documentation**: Add descriptions to all jobs and sections
-
-### **Security Considerations**
-- **Token Security**: Use token files or environment variables, not command-line flags
-- **Dry Run First**: Always test with `--dry-run` before actual operations
-- **Audit Logs**: Use debug logging for audit trails
-- **Least Privilege**: Use Vault tokens with minimal required permissions
-
-### **Operational Excellence**
-- **Deterministic Output**: Use `--sort-keys` for consistent file generation
-- **Error Handling**: Use `--continue-on-error` for resilient batch processing
-- **Logging**: Configure appropriate log levels for different environments
-- **Monitoring**: Parse structured JSON logs for operational insights
-
-### **Performance Optimization**
-- **Batch Over Generate**: Use batch command for multiple paths
-- **Connection Reuse**: Single command execution reuses Vault connections
-- **Depth Limits**: Use appropriate depth limits for list operations
-- **Output Formats**: Choose appropriate formats for downstream consumption
-
-## Troubleshooting
-
-### **Common Issues**
-- **Connection Refused**: Check `VAULT_ADDR` and network connectivity
-- **Authentication Failed**: Verify token validity with `vault token lookup`
-- **Permission Denied**: Ensure token has read/write permissions for target paths
-- **Path Not Found**: Use `list` command to verify path existence
-
-### **Debug Techniques**
+**Issue: "certificate verification failed"**
 ```bash
-# Enable debug logging
-./vault-envrc-generator --log-level debug [command]
+# For development with self-signed certificates
+export VAULT_SKIP_VERIFY=true
 
-# Test connection
-./vault-envrc-generator list --path secrets/ --depth 0
+# Or provide CA certificate
+export VAULT_CACERT=/path/to/ca.pem
+```
 
-# Verify token
+### Authentication Problems
+
+**Issue: "permission denied"**
+```bash
+# Check token permissions
 vault token lookup
 
-# Check Vault status
-vault status
+# Verify path access
+vault kv get secrets/your/path
+
+# Check token policies
+vault token capabilities secrets/your/path
 ```
 
-This comprehensive guide provides everything needed to effectively use the Vault Envrc Generator in real-world scenarios, from simple secret extraction to complex multi-environment deployments.
+**Issue: "token expired"**
+```bash
+# Renew token if renewable
+vault token renew
+
+# Or authenticate again
+vault auth -method=userpass username=yourusername
+```
+
+### Configuration Problems
+
+**Issue: "path not found"**
+```bash
+# List available paths
+vault-envrc-generator list --path secrets/
+
+# Check path structure
+vault kv list secrets/
+```
+
+**Issue: "template rendering failed"**
+```bash
+# Test template variables
+vault token lookup -format=json | jq '.data.meta'
+
+# Use simpler paths without templates for testing
+```
+
+## Best Practices
+
+### Security Best Practices
+
+1. **Token Management**:
+   - Use short-lived tokens when possible
+   - Store tokens securely (not in version control)
+   - Rotate tokens regularly
+   - Use least-privilege policies
+
+2. **Output Security**:
+   - Set appropriate file permissions on generated files
+   - Clean up temporary files containing secrets
+   - Use `.gitignore` to prevent accidental commits
+   - Consider encrypting output files for storage
+
+3. **Access Control**:
+   - Use specific Vault policies for different environments
+   - Implement token renewal strategies
+   - Monitor token usage and access patterns
+
+### Operational Best Practices
+
+1. **Configuration Management**:
+   - Version control your batch configuration files
+   - Use environment-specific configurations
+   - Document your secret organization structure
+   - Test configurations in development before production
+
+2. **Automation**:
+   - Integrate into CI/CD pipelines
+   - Use health checks to verify secret availability
+   - Implement rollback procedures for failed deployments
+   - Monitor secret usage and rotation
+
+3. **Development Workflow**:
+   - Use consistent naming conventions
+   - Organize secrets logically in Vault
+   - Document required secrets for each application
+   - Provide example configurations for new developers
+
+This comprehensive guide provides everything you need to start using the Vault Envrc Generator effectively. For detailed configuration options and advanced features, see:
+
+```
+glaze help yaml-configuration-reference
+glaze help vault-envrc-architecture
+```

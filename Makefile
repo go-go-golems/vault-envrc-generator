@@ -30,7 +30,7 @@ test:
 
 build:
 	go generate ./...
-	go build ./...
+	go build -tags fts5	 ./...
 
 goreleaser:
 	goreleaser release --skip=sign --snapshot --clean
@@ -55,5 +55,5 @@ bump-glazed:
 
 VAULT_BINARY=$(shell which vault-envrc-generator)
 install:
-	go build -o ./dist/vault-envrc-generator ./cmd/vault-envrc-generator && \
+	go build -tags fts5 -o ./dist/vault-envrc-generator ./cmd/vault-envrc-generator && \
 		cp ./dist/vault-envrc-generator $(VAULT_BINARY)

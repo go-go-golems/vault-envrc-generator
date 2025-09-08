@@ -86,36 +86,46 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	if err != nil {
 		return err
 	}
-	// Apply job/section filtering if requested
+	// Apply job/section filtering if requested (ignore empty selectors)
 	if len(s.Jobs) > 0 {
 		allowedJobs := map[string]struct{}{}
 		for _, name := range s.Jobs {
+			if name == "" {
+				continue
+			}
 			allowedJobs[name] = struct{}{}
 		}
-		filteredJobs := make([]batch.Job, 0, len(cfg.Jobs))
-		for _, job := range cfg.Jobs {
-			if _, ok := allowedJobs[job.Name]; ok {
-				filteredJobs = append(filteredJobs, job)
+		if len(allowedJobs) > 0 {
+			filteredJobs := make([]batch.Job, 0, len(cfg.Jobs))
+			for _, job := range cfg.Jobs {
+				if _, ok := allowedJobs[job.Name]; ok {
+					filteredJobs = append(filteredJobs, job)
+				}
 			}
+			cfg.Jobs = filteredJobs
 		}
-		cfg.Jobs = filteredJobs
 	}
 	if len(s.Sections) > 0 {
 		allowedSecs := map[string]struct{}{}
 		for _, name := range s.Sections {
-			allowedSecs[name] = struct{}{}
-		}
-		for ji, job := range cfg.Jobs {
-			if len(job.Sections) == 0 {
+			if name == "" {
 				continue
 			}
-			newSecs := make([]batch.Section, 0, len(job.Sections))
-			for _, sec := range job.Sections {
-				if _, ok := allowedSecs[sec.Name]; ok {
-					newSecs = append(newSecs, sec)
+			allowedSecs[name] = struct{}{}
+		}
+		if len(allowedSecs) > 0 {
+			for ji, job := range cfg.Jobs {
+				if len(job.Sections) == 0 {
+					continue
 				}
+				newSecs := make([]batch.Section, 0, len(job.Sections))
+				for _, sec := range job.Sections {
+					if _, ok := allowedSecs[sec.Name]; ok {
+						newSecs = append(newSecs, sec)
+					}
+				}
+				cfg.Jobs[ji].Sections = newSecs
 			}
-			cfg.Jobs[ji].Sections = newSecs
 		}
 	}
 	proc := batch.Processor{Client: client}

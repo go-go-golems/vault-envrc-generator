@@ -19,7 +19,7 @@ import (
 type TokenCommand struct{ *gcmds.CommandDescription }
 
 type TokenSettings struct {
-    Fields []string `glazed.parameter:"fields"`
+    Keys []string `glazed.parameter:"keys"`
 }
 
 func NewTokenCommand() (*TokenCommand, error) {
@@ -32,7 +32,7 @@ func NewTokenCommand() (*TokenCommand, error) {
         "token",
         gcmds.WithShort("Show Vault token details (for templates)"),
         gcmds.WithFlags(
-            parameters.NewParameterDefinition("fields", parameters.ParameterTypeStringList, parameters.WithHelp("Limit to these fields (default: all)")),
+            parameters.NewParameterDefinition("keys", parameters.ParameterTypeStringList, parameters.WithHelp("Limit to these keys (default: all)")),
         ),
         gcmds.WithLayersList(cmdLayer),
     )
@@ -73,9 +73,9 @@ func (c *TokenCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *glayer
     // Flatten fields for output
     add := func(key string, value interface{}) error {
         // filter if specified
-        if len(s.Fields) > 0 {
+        if len(s.Keys) > 0 {
             found := false
-            for _, f := range s.Fields {
+            for _, f := range s.Keys {
                 if f == key {
                     found = true
                     break

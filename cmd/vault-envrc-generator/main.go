@@ -115,5 +115,13 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if vc, err := appcmds.NewValidateCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(vc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	cobra.CheckErr(rootCmd.Execute())
 }

@@ -33,6 +33,8 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 		}
 	}
 
+	log.Info().Str("base_path", base).Int("sets_total", len(spec.Sets)).Msg("seed: start")
+
 	for i, set := range spec.Sets {
 		// Determine target path: join with base if relative; error if relative without base
 		target := set.Path
@@ -46,12 +48,15 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 		}
 
 		data := map[string]interface{}{}
+		missingEnv := []string{}
 		for k, v := range set.Data {
 			data[k] = v
 		}
 		for k, envName := range set.Env {
 			if val, ok := os.LookupEnv(envName); ok {
 				data[k] = val
+			} else {
+				missingEnv = append(missingEnv, envName)
 			}
 		}
 		for k, filePath := range set.Files {
@@ -68,6 +73,18 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			}
 		}
 
+		log.Debug().
+			Int("index", i+1).
+			Str("set_name", set.Name).
+			Str("set_path", set.Path).
+			Str("target", renderedTarget).
+			Int("static_keys", len(set.Data)).
+			Int("env_keys_present", len(set.Env)-len(missingEnv)).
+			Int("env_keys_missing", len(missingEnv)).
+			Int("file_keys", len(set.Files)).
+			Strs("missing_env", missingEnv).
+			Msg("seed: resolved set")
+
 		if len(data) == 0 {
 			log.Debug().Str("path", renderedTarget).Msg("seed: skipping (no data)")
 			continue
@@ -83,6 +100,7 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 		}
 		log.Info().Str("path", renderedTarget).Int("keys", len(data)).Msg("seed: wrote secrets")
 	}
+	log.Info().Msg("seed: completed")
 	return nil
 }
 

@@ -6,6 +6,7 @@ type Spec struct {
 }
 
 type Set struct {
+	Name  string            `yaml:"name,omitempty"`
 	Path  string            `yaml:"path"`
 	Data  map[string]string `yaml:"data"`
 	Env   map[string]string `yaml:"env"`

@@ -90,19 +90,30 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 		spec.BasePath = s.BasePath
 	}
 
-	// Filter sets if requested
+	// Filter sets if requested (match by name or path) and ignoring empty selectors
 	if len(s.Sets) > 0 {
 		allowed := map[string]struct{}{}
 		for _, p := range s.Sets {
+			if p == "" {
+				continue
+			}
 			allowed[p] = struct{}{}
 		}
-		filtered := make([]seed.Set, 0, len(spec.Sets))
-		for _, st := range spec.Sets {
-			if _, ok := allowed[st.Path]; ok {
-				filtered = append(filtered, st)
+		if len(allowed) > 0 {
+			filtered := make([]seed.Set, 0, len(spec.Sets))
+			for _, st := range spec.Sets {
+				if _, ok := allowed[st.Path]; ok {
+					filtered = append(filtered, st)
+					continue
+				}
+				if st.Name != "" {
+					if _, ok := allowed[st.Name]; ok {
+						filtered = append(filtered, st)
+					}
+				}
 			}
+			spec.Sets = filtered
 		}
-		spec.Sets = filtered
 	}
 
 	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun})

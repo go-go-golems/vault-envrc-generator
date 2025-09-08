@@ -1,11 +1,10 @@
 ---
 Title: YAML Configuration Reference — Vault Envrc Generator
 Slug: yaml-configuration-reference
-Short: Complete reference for batch processing, seed specifications, and configuration formats
+Short: Concise reference for batch processing YAML and template usage
 Topics:
 - yaml
 - batch
-- seed
 - configuration
 - templates
 IsTemplate: false
@@ -16,11 +15,15 @@ SectionType: GeneralTopic
 
 # YAML Configuration Reference — Vault Envrc Generator
 
-The Vault Envrc Generator uses YAML configuration files to define complex batch operations and seed specifications. This reference provides comprehensive documentation for all configuration formats, field options, and usage patterns.
+This document defines the YAML format for the `batch` command and the shared template rules. For the seed format, see:
 
-## Batch Configuration Format
+```
+vault-envrc-generator help seed-configuration-guide
+```
 
-Batch configurations enable processing multiple Vault paths with sophisticated transformation, filtering, and output generation capabilities. The configuration uses a hierarchical job-and-section structure to organize complex secret processing workflows.
+## Batch Configuration
+
+Batch files describe jobs that read from one or more Vault paths and write a single output per job.
 
 ### Top-Level Structure
 
@@ -32,10 +35,10 @@ jobs:
     # ... job configuration
 ```
 
-#### **base_path** (string, optional)
-The default base path prepended to all relative paths in jobs and sections. Supports Go template syntax for dynamic path construction.
+#### base_path (string, optional)
+Prefix applied to relative paths in jobs and sections. Supports Go templates.
 
-**Template Variables Available:**
+Template variables:
 - `{{ .Token.OIDCUserID }}` - OIDC user identifier from token
 - `{{ .Token.DisplayName }}` - Token display name
 - `{{ .Token.EntityID }}` - Vault entity ID
@@ -53,12 +56,10 @@ base_path: secrets/personal/{{ .Token.OIDCUserID }}/config
 base_path: secrets/{{ .Token.Meta.environment }}/shared
 ```
 
-#### **jobs** (array, required)
-Array of job definitions that specify processing operations, output generation, and section organization.
+#### jobs (array, required)
+List of jobs and their outputs.
 
-### Job Configuration
-
-Each job represents a logical grouping of secrets processing with shared output destination and formatting options.
+### Job
 
 ```yaml
 jobs:
@@ -79,7 +80,7 @@ jobs:
         prefix: REDIS_
 ```
 
-#### Job Fields Reference
+#### Job fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -98,9 +99,7 @@ jobs:
 | `sections` | array | | Section definitions for multi-source processing |
 | `fixed` | object | | Static key-value pairs added to output |
 
-### Section Configuration
-
-Sections provide granular control over individual Vault paths within a job, allowing per-section filtering, transformation, and mapping.
+### Section
 
 ```yaml
 sections:
@@ -117,7 +116,7 @@ sections:
       GOOGLE_PROVIDER: "oauth2"
 ```
 
-#### Section Fields Reference
+#### Section fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -135,7 +134,7 @@ sections:
 | `format` | string | | Section-specific format override |
 | `output` | string | | Section-specific output file |
 
-### Advanced Features
+### Advanced
 
 #### **Environment Mapping (`env_map`)**
 Direct mapping from Vault keys to environment variable names, bypassing prefix and transformation rules.
@@ -176,15 +175,13 @@ sections:
     exclude_keys: [ssl_cert, ssl_key, backup_*]
 ```
 
-### Output Aggregation Behavior
-
-Multiple sections within a job are aggregated based on the output format:
+### Output aggregation
 
 - **envrc**: Sections are concatenated with headers (`# Section: name`)
 - **JSON/YAML**: Shallow merge with later sections overriding earlier ones
 - **Conflicts**: Later sections take precedence for duplicate keys
 
-### Complete Batch Example
+### Complete example
 
 ```yaml
 base_path: secrets/environments/{{ .Token.OIDCUserID }}/local
@@ -234,124 +231,12 @@ jobs:
         prefix: db-
 ```
 
-## Seed Configuration Format
+## Seed Configuration
 
-Seed configurations define how to populate Vault with secrets from local sources including environment variables, files, and static data.
+See the dedicated guide for the `seed` YAML format:
 
-### Top-Level Structure
-
-```yaml
-base_path: secrets/personal/{{ .Token.OIDCUserID }}
-sets:
-  - path: app/config
-    data:
-      api_version: "v1"
-    env:
-      api_key: API_KEY
-    files:
-      private_key: ~/.ssh/id_rsa
 ```
-
-#### **base_path** (string, optional)
-Default base path for all relative paths in sets. Supports the same template variables as batch configurations.
-
-#### **sets** (array, required)
-Array of set definitions that specify target Vault paths and data sources.
-
-### Set Configuration
-
-Each set defines a target Vault path and the data sources to populate it with.
-
-```yaml
-sets:
-  - path: oauth/google
-    data:
-      provider: "google"
-      scope: "openid profile email"
-    env:
-      client_id: GOOGLE_CLIENT_ID
-      client_secret: GOOGLE_CLIENT_SECRET
-    files:
-      service_account: ~/credentials/google-service-account.json
-```
-
-#### Set Fields Reference
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `path` | string | ✓ | Target Vault path (absolute or relative to base_path) |
-| `data` | object | | Static key-value pairs |
-| `env` | object | | Environment variable mappings (vault_key: ENV_VAR) |
-| `files` | object | | File content mappings (vault_key: file_path) |
-
-### Data Sources
-
-#### **Static Data (`data`)**
-Direct key-value pairs written to Vault as-is.
-
-```yaml
-sets:
-  - path: app/metadata
-    data:
-      version: "1.2.3"
-      environment: "production"
-      maintainer: "devops@company.com"
-```
-
-#### **Environment Variables (`env`)**
-Values sourced from environment variables at runtime.
-
-```yaml
-sets:
-  - path: external/apis
-    env:
-      openai_key: OPENAI_API_KEY      # Vault key: env var name
-      github_token: GITHUB_TOKEN
-      slack_webhook: SLACK_WEBHOOK_URL
-```
-
-#### **File Contents (`files`)**
-Values loaded from file contents, supporting home directory expansion (`~`).
-
-```yaml
-sets:
-  - path: certificates
-    files:
-      ca_cert: /etc/ssl/certs/ca.pem
-      private_key: ~/.ssh/service_key
-      config_json: ~/app/config.json
-```
-
-### Complete Seed Example
-
-```yaml
-base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}
-
-sets:
-  - path: database
-    data:
-      provider: "postgresql"
-      port: "5432"
-    env:
-      host: DB_HOST
-      username: DB_USER
-      password: DB_PASSWORD
-
-  - path: oauth/google
-    data:
-      provider: "google"
-      redirect_uri: "http://localhost:3000/auth/callback"
-    env:
-      client_id: GOOGLE_CLIENT_ID
-      client_secret: GOOGLE_CLIENT_SECRET
-    files:
-      service_account: ~/credentials/google-service-account.json
-
-  - path: certificates/ssl
-    files:
-      cert: ~/.ssl/server.crt
-      key: ~/.ssl/server.key
-      ca_bundle: ~/.ssl/ca-bundle.pem
+vault-envrc-generator help seed-configuration-guide
 ```
 
 ## Template System
@@ -410,28 +295,28 @@ jobs:
         path: ../shared/{{ .Token.Meta.team }}
 ```
 
-## Configuration Validation
+## Validation
 
-### Required Fields
+### Required fields
 - **Batch**: `jobs` array with at least one job containing `name` and `output`
 - **Seed**: `sets` array with at least one set containing `path` and data source
 
-### Path Resolution Rules
+### Path resolution
 1. **Absolute paths** (starting with `/` or mount name) are used as-is
 2. **Relative paths** are joined with `base_path`
 3. **Template rendering** occurs after path resolution
 4. **Missing base_path** with relative paths causes validation errors
 
-### Format Validation
+### Format validation
 - **format** must be one of: `envrc`, `json`, `yaml`
 - **Output paths** are validated for write permissions
 - **Template syntax** is validated during configuration parsing
 
-## Best Practices
+## Best practices
 
-### Organization Patterns
+### Organization
 
-#### **Environment-Based Structure**
+#### Environment-based
 ```yaml
 base_path: secrets/environments/{{ .Token.Meta.environment }}
 jobs:
@@ -442,7 +327,7 @@ jobs:
       - path: database/replica
 ```
 
-#### **Service-Oriented Structure**
+#### Service-oriented
 ```yaml
 jobs:
   - name: api-service
@@ -454,7 +339,7 @@ jobs:
       - path: shared/monitoring
 ```
 
-#### **Multi-Environment Generation**
+#### Multi-environment
 ```yaml
 jobs:
   - name: development-config
@@ -468,22 +353,22 @@ jobs:
     sections: [...]
 ```
 
-### Security Considerations
+### Security
 
 1. **Template Validation**: Templates are validated to prevent path injection
 2. **Key Filtering**: Use `include_keys` rather than `exclude_keys` for sensitive data
 3. **Output Permissions**: Ensure output files have appropriate permissions
 4. **Token Scope**: Use least-privilege tokens for batch operations
 
-### Performance Optimization
+### Performance
 
 1. **Section Organization**: Group related secrets to minimize Vault API calls
 2. **Base Path Usage**: Leverage base paths to avoid repetitive path specifications
 3. **Key Filtering**: Filter at the section level to reduce data transfer
 4. **Output Formats**: Use appropriate formats (envrc for shell, JSON for APIs)
 
-This comprehensive reference covers all configuration options and usage patterns for the Vault Envrc Generator's YAML configuration system. For practical examples and getting started guidance, see:
+For practical examples and getting started, see:
 
 ```
-glaze help vault-envrc-getting-started
+vault-envrc-generator help vault-envrc-getting-started
 ```

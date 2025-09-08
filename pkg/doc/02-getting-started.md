@@ -1,6 +1,6 @@
 ---
 Title: Getting Started — Vault Envrc Generator
-Slug: getting-started
+Slug: vault-envrc-getting-started
 Short: Complete guide to installation, configuration, and practical workflows for secret management
 Topics:
 - tutorial
@@ -45,58 +45,7 @@ Before starting, ensure you have the necessary components and access:
 
 ## Installation
 
-The tool can be installed through multiple methods depending on your environment and preferences.
-
-### Method 1: Download Pre-built Binaries
-
-Pre-built binaries are available for Linux, macOS, and Windows:
-
-```bash
-# Download latest release for your platform
-curl -L https://github.com/go-go-golems/vault-envrc-generator/releases/latest/download/vault-envrc-generator_linux_amd64.tar.gz | tar xz
-
-# Make executable and add to PATH
-chmod +x vault-envrc-generator
-sudo mv vault-envrc-generator /usr/local/bin/
-
-# Verify installation
-vault-envrc-generator --version
-```
-
-### Method 2: Install via Package Managers
-
-**Homebrew (macOS/Linux):**
-```bash
-brew install go-go-golems/tap/vault-envrc-generator
-```
-
-**Debian/Ubuntu:**
-```bash
-# Add repository and install
-curl -s https://packagecloud.io/install/repositories/go-go-golems/main/script.deb.sh | sudo bash
-sudo apt-get install vault-envrc-generator
-```
-
-### Method 3: Build from Source
-
-Building from source gives you the latest features and allows customization:
-
-```bash
-# Clone repository
-git clone https://github.com/go-go-golems/vault-envrc-generator.git
-cd vault-envrc-generator
-
-# Build with optimizations
-go build -ldflags "-w -s" -o vault-envrc-generator ./cmd/vault-envrc-generator
-
-# Verify build
-./vault-envrc-generator --help
-```
-
-**Build Optimization Options:**
-- `-ldflags "-w -s"` reduces binary size by stripping debug information
-- `GOCACHE=$(pwd)/.gocache` uses local cache for faster rebuilds
-- Cross-compilation: `GOOS=linux GOARCH=amd64 go build`
+See the repository README for installation methods (binaries, package managers, source build).
 
 ## Vault Connection Configuration
 
@@ -355,9 +304,9 @@ vault-envrc-generator generate \
   --format envrc
 ```
 
-## Batch Processing for Complex Workflows
+## Batch Processing (basics)
 
-The `batch` command processes multiple secret paths with sophisticated configuration, making it ideal for complex applications and multi-environment setups.
+The `batch` command processes multiple Vault paths and produces one output per job.
 
 ### Understanding Batch Configuration
 
@@ -402,9 +351,7 @@ jobs:
         transform_keys: true
 ```
 
-### Running Batch Operations
-
-Execute batch configurations with flexible options:
+### Run a batch file
 
 ```bash
 # Process complete configuration
@@ -420,9 +367,7 @@ vault-envrc-generator batch --config app-config.yaml --output /tmp/test-config
 vault-envrc-generator batch --config app-config.yaml --continue-on-error
 ```
 
-### Multi-Environment Configurations
-
-Create environment-specific configurations using templates:
+### Multi-environment with templates
 
 ```yaml
 # multi-env.yaml
@@ -444,137 +389,47 @@ jobs:
         transform_keys: true
 ```
 
-**Template Variables Available:**
-- `{{ .Token.OIDCUserID }}` - User identifier from OIDC tokens
-- `{{ .Token.DisplayName }}` - Human-readable token name
-- `{{ .Token.Meta.environment }}` - Environment from token metadata
-- `{{ .Token.Meta.team }}` - Team from token metadata
+Template variables commonly used:
+- `{{ .Token.OIDCUserID }}`
+- `{{ .Token.Meta.environment }}`
 
-## Advanced Features
+## Seeding Vault (basics)
 
-### Environment Variable Mapping
-
-Map Vault keys directly to specific environment variable names:
+Write secrets to Vault from local sources using a YAML spec:
 
 ```yaml
-sections:
-  - name: service-account
-    path: google/service-account
-    env_map:
-      GOOGLE_SERVICE_ACCOUNT_EMAIL: client_email
-      GOOGLE_PRIVATE_KEY: private_key
-      GOOGLE_PROJECT_ID: project_id
-```
-
-### Static Value Injection
-
-Add configuration constants to your output:
-
-```yaml
-sections:
-  - name: app-metadata
-    path: app/secrets
-    fixed:
-      APP_VERSION: "1.2.3"
-      ENVIRONMENT: "production"
-      DEBUG: "false"
-```
-
-### Custom Templates
-
-Use custom templates for specialized output formats:
-
-```bash
-# Create custom template
-cat > custom.tmpl << 'EOF'
-{{- range $key, $value := . }}
-{{ $key }}={{ $value | quote }}
-{{- end }}
-EOF
-
-# Use custom template
-vault-envrc-generator generate \
-  --path secrets/app/config \
-  --template custom.tmpl \
-  --output app.conf
-```
-
-## Integration Workflows
-
-### Development Workflow
-
-Set up automatic environment loading for development:
-
-```bash
-# Create development configuration
-cat > dev-config.yaml << 'EOF'
+# seed-dev.yaml
 base_path: secrets/environments/development
-jobs:
-  - name: dev-env
-    output: .envrc
-    format: envrc
-    sections:
-      - path: database
-        prefix: DB_
-      - path: api-keys
-        transform_keys: true
-EOF
-
-# Generate environment file
-vault-envrc-generator batch --config dev-config.yaml
-
-# Use with direnv for automatic loading
-echo "source .envrc" >> .envrc
-direnv allow
+sets:
+  - path: database
+    data:
+      provider: "postgresql"
+      port: "5432"
+    env:
+      host: DB_HOST
+      username: DB_USER
+      password: DB_PASSWORD
+  - path: certificates
+    files:
+      ca_cert: ~/.ssl/ca.pem
+      server_key: ~/.ssl/localhost.key
 ```
 
-### CI/CD Pipeline Integration
-
-Integrate secret extraction into deployment pipelines:
+Dry run, then seed:
 
 ```bash
-#!/bin/bash
-# deploy.sh
-
-# Extract production secrets
-vault-envrc-generator batch --config production.yaml --output /tmp/secrets
-
-# Load secrets for deployment
-source /tmp/secrets/app.envrc
-
-# Deploy application with secrets
-docker run --env-file /tmp/secrets/app.env myapp:latest
-
-# Clean up secrets
-rm -rf /tmp/secrets
+vault-envrc-generator seed --config seed-dev.yaml --dry-run
+vault-envrc-generator seed --config seed-dev.yaml
 ```
 
-### Kubernetes Integration
+## Next steps
 
-Generate Kubernetes secret manifests:
-
-```yaml
-# k8s-secrets.yaml
-jobs:
-  - name: app-secrets
-    output: k8s/app-secrets.yaml
-    format: yaml
-    sections:
-      - name: database
-        path: app/database
-        include_keys: [host, port, database, username, password]
-      
-      - name: api-keys
-        path: app/api-keys
-        transform_keys: true
-```
+For details and complete references:
 
 ```bash
-# Generate Kubernetes secrets
-vault-envrc-generator batch --config k8s-secrets.yaml
-
-# Apply to cluster
-kubectl apply -f k8s/app-secrets.yaml
+vault-envrc-generator help yaml-configuration-reference   # batch YAML
+vault-envrc-generator help seed-configuration-guide       # seed YAML
+vault-envrc-generator help vault-envrc-architecture       # internals
 ```
 
 ## Troubleshooting Common Issues

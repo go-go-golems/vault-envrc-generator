@@ -1,7 +1,7 @@
 ---
 Title: Seed Configuration Guide — Vault Envrc Generator
 Slug: seed-configuration-guide
-Short: Complete guide to populating Vault with secrets using YAML-driven seed configurations
+Short: Guide to populating Vault with secrets using YAML-driven seed configurations
 Topics:
 - seed
 - yaml
@@ -12,28 +12,23 @@ Topics:
 IsTemplate: false
 IsTopLevel: true
 ShowPerDefault: true
-SectionType: Reference
+SectionType: GeneralTopic
 ---
 
 # Seed Configuration Guide — Vault Envrc Generator
 
-The seed command reverses the typical Vault workflow by populating Vault with secrets from local sources. This capability is essential for development environment setup, migrating secrets from other systems, and bootstrapping new Vault instances. The seed command uses YAML configuration files to define exactly what data should be written to which Vault paths.
+The `seed` command writes secrets to Vault from local sources (static values, environment variables, and files) using a YAML specification.
 
-## When to Use Seed Operations
+## When to use `seed`
 
-Seed operations are particularly valuable in several scenarios where you need to populate Vault with data from external sources:
-
-**Development Environment Setup**: New team members need their local Vault instance populated with the secrets necessary for development work. Rather than manually entering dozens of secrets through the Vault UI, a seed configuration can populate everything automatically.
-
-**Migration from Other Secret Stores**: When moving from other secret management systems or from file-based configuration, seed operations provide a structured way to transfer existing secrets into Vault while maintaining organization and applying consistent naming patterns.
-
-**Testing and CI/CD**: Automated testing environments often need predictable secret data. Seed configurations ensure that test Vault instances have exactly the secrets needed for comprehensive testing scenarios.
-
-**Initial System Bootstrap**: New Vault deployments require initial secret population. Seed configurations provide a repeatable, auditable way to establish the base secret structure for new environments.
+- Development setup for new machines or users
+- Migration from env/files to Vault
+- CI/CD and test fixtures
+- Initial bootstrap of new Vault namespaces
 
 ## Seed Configuration Structure
 
-Seed configurations use a straightforward YAML structure that defines target Vault paths and the data sources used to populate them. The configuration supports multiple data sources including static values, environment variables, and file contents.
+Seed configurations define target Vault paths and data sources. Supported sources: `data` (static), `env` (environment variables), `files` (file contents).
 
 ### Top-Level Configuration
 
@@ -56,17 +51,17 @@ sets:
       server_key: ~/.ssl/server.key
 ```
 
-#### **base_path** (string, optional)
+#### base_path (string, optional)
 
-The base path serves as a prefix for all relative paths defined in the sets array. This allows you to organize secrets under a common hierarchy without repeating the full path in every set definition. The base path supports Go template syntax for dynamic path construction based on token information.
+Prefix for relative `path` entries. Supports Go templates.
 
-**Template Variables Available:**
+Template variables:
 - `{{ .Token.OIDCUserID }}` - OIDC user identifier extracted from the token
 - `{{ .Token.DisplayName }}` - Human-readable token display name  
 - `{{ .Token.EntityID }}` - Vault entity identifier
 - `{{ .Token.Meta.key }}` - Token metadata values (e.g., environment, team, role)
 
-**Base Path Examples:**
+Examples:
 ```yaml
 # Static environment-specific path
 base_path: secrets/environments/development
@@ -81,13 +76,11 @@ base_path: secrets/{{ .Token.Meta.environment }}/{{ .Token.Meta.team }}
 base_path: secrets/{{- if eq .Token.Meta.role "admin" }}admin{{- else }}user{{- end }}
 ```
 
-#### **sets** (array, required)
+#### sets (array, required)
 
-The sets array contains individual set definitions, each specifying a target Vault path and the data sources used to populate it. Each set can combine multiple data sources, allowing you to build comprehensive secret structures from various inputs.
+Each set writes one secret to a Vault path. Sets can combine multiple sources.
 
-## Set Configuration Details
-
-Each set in the configuration defines a complete secret population operation, specifying where the data should be written in Vault and where it should be sourced from locally.
+## Set configuration
 
 ### Set Structure
 
@@ -106,7 +99,7 @@ sets:
       private_key: ~/.ssh/google-service-key
 ```
 
-### Set Fields Reference
+### Set fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -115,18 +108,18 @@ sets:
 | `env` | object | | Environment variable mappings (vault_key: ENV_VAR_NAME) |
 | `files` | object | | File content mappings (vault_key: file_path) |
 
-### Path Resolution
+### Path resolution
 
 Vault paths in set definitions can be either absolute or relative:
 
-**Absolute Paths**: Start with a mount point name or `/` and are used exactly as specified:
+Absolute paths: start with a mount or `/` and are used as-is:
 ```yaml
 sets:
   - path: secret/production/database  # Absolute path
   - path: /secret/shared/certificates  # Absolute path with leading slash
 ```
 
-**Relative Paths**: Combined with the base_path to create the final Vault path:
+Relative paths: joined with `base_path`:
 ```yaml
 base_path: secrets/environments/development
 sets:
@@ -134,18 +127,16 @@ sets:
   - path: api/keys         # Becomes: secrets/environments/development/api/keys
 ```
 
-**Template Support**: Both absolute and relative paths support Go template syntax:
+Templates: supported in absolute and relative paths:
 ```yaml
 sets:
   - path: environments/{{ .Token.Meta.environment }}/database
   - path: users/{{ .Token.OIDCUserID }}/personal
 ```
 
-## Data Sources
+## Data sources
 
-The seed command supports three types of data sources, which can be combined within a single set to create comprehensive secret structures.
-
-### Static Data (`data`)
+### Static data (`data`)
 
 Static data provides fixed key-value pairs that are written directly to Vault. This is useful for configuration constants, metadata, and any values that don't change between environments or deployments.
 
@@ -171,13 +162,9 @@ sets:
       max_connections: "100"
 ```
 
-**Use Cases for Static Data:**
-- Application version information and build metadata
-- Configuration constants that don't vary by environment
-- Feature flags and application settings
-- Default values and fallback configurations
+Use cases: constants, metadata, feature flags, defaults.
 
-### Environment Variables (`env`)
+### Environment variables (`env`)
 
 Environment variable mappings allow you to source secret values from the current environment at runtime. This is particularly useful for CI/CD scenarios and when migrating from environment-based secret management.
 
@@ -199,19 +186,11 @@ sets:
       ssl_cert: DATABASE_SSL_CERT
 ```
 
-**Environment Variable Behavior:**
-- Variables are resolved at runtime when the seed command executes
-- Missing environment variables cause the seed operation to fail with a clear error message
-- Empty environment variables are treated as empty strings in Vault
-- Variable names are case-sensitive and must match exactly
+Behavior: resolved at runtime; missing variables fail the run; empty values are written as empty strings; names are case‑sensitive.
 
-**Use Cases for Environment Variables:**
-- CI/CD pipeline secrets that vary by build environment
-- Developer-specific credentials and API keys
-- Secrets that are already managed through environment variables
-- Migration from Docker secrets or Kubernetes secrets
+Use cases: CI/CD, developer credentials, env‑managed secrets, migrations.
 
-### File Contents (`files`)
+### File contents (`files`)
 
 File content mappings read data from local files and store the contents as secret values in Vault. This is essential for certificates, keys, configuration files, and any multi-line secret data.
 
@@ -237,27 +216,13 @@ sets:
       feature_flags: ~/config/features.toml
 ```
 
-**File Path Resolution:**
-- **Absolute paths** are used exactly as specified: `/etc/ssl/certs/ca.pem`
-- **Home directory expansion** is supported: `~/.ssh/id_rsa` expands to `/home/user/.ssh/id_rsa`
-- **Relative paths** are resolved relative to the current working directory
-- **File permissions** are not preserved; only file contents are stored in Vault
+Path resolution: absolute respected; `~` expands to home; relative resolved from CWD; permissions are not preserved (contents only).
 
-**File Reading Behavior:**
-- Files are read as text content and stored as string values in Vault
-- Binary files are supported but stored as base64-encoded strings
-- Large files are supported but consider Vault's value size limits
-- File reading errors cause the entire seed operation to fail
+Behavior: read as text; binaries should be base64‑encoded; large files depend on Vault limits; read errors fail the run.
 
-**Use Cases for File Contents:**
-- SSL/TLS certificates and private keys
-- SSH keys and known hosts files
-- Configuration files that need to be stored as secrets
-- License files and other credential documents
+Use cases: TLS/SSH keys, config files, licenses.
 
-## Data Source Combination
-
-Multiple data sources can be combined within a single set to create comprehensive secret structures. The seed command processes all data sources and combines them into a single secret at the target Vault path.
+## Combining sources
 
 ```yaml
 sets:
@@ -277,15 +242,9 @@ sets:
       ssl_key: ~/.ssl/app.key
 ```
 
-**Combination Rules:**
-- All data sources are merged into a single Vault secret
-- Key conflicts between sources result in an error
-- Processing order: `data`, then `env`, then `files`
-- Empty values from any source are included in the final secret
+Rules: merged into one secret; key conflicts error; processing order `data` → `env` → `files`; empty values are written.
 
-## Template System Integration
-
-The seed command uses the same template system as other Vault Envrc Generator commands, providing access to token information for dynamic path construction.
+## Template integration
 
 ### Template Context
 
@@ -304,7 +263,7 @@ Token:
   Policies: ["default", "developer"] # Assigned policies
 ```
 
-### Dynamic Path Examples
+### Dynamic path examples
 
 ```yaml
 # User-specific development secrets
@@ -330,11 +289,9 @@ sets:
       access_level: "{{ .Token.Meta.role }}"
 ```
 
-## Complete Configuration Examples
+## Examples
 
-### Development Environment Bootstrap
-
-This example shows how to bootstrap a complete development environment with all necessary secrets:
+### Development environment bootstrap
 
 ```yaml
 base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}
@@ -399,9 +356,7 @@ sets:
       app_config: ~/config/app-development.json
 ```
 
-### Migration from Environment Variables
-
-This example demonstrates migrating from an environment variable-based setup to Vault:
+### Migration from environment variables
 
 ```yaml
 base_path: secrets/migration/{{ .Token.Meta.environment }}
@@ -450,9 +405,7 @@ sets:
       prometheus_token: PROMETHEUS_TOKEN
 ```
 
-### Certificate and Key Management
-
-This example focuses on managing certificates and keys for different environments:
+### Certificate and key management
 
 ```yaml
 base_path: secrets/certificates/{{ .Token.Meta.environment }}
@@ -506,11 +459,9 @@ sets:
       public_key: ~/.keys/jwt-signing.pub
 ```
 
-## Operational Workflows
+## Operations
 
-### Dry Run Operations
-
-Always preview seed operations before executing them to understand exactly what will be written to Vault:
+### Dry run
 
 ```bash
 # Preview all operations
@@ -520,16 +471,9 @@ vault-envrc-generator seed --config development-setup.yaml --dry-run
 vault-envrc-generator seed --config development-setup.yaml --dry-run --log-level debug
 ```
 
-The dry run output shows:
-- Which Vault paths will be written to
-- How many keys will be written to each path
-- Any template rendering results
-- File reading and environment variable resolution
-- Validation errors or warnings
+Dry run shows target paths, key counts, rendered templates, file/env resolution, and validation issues.
 
-### Incremental Updates
-
-Seed operations can be run multiple times safely. The command overwrites existing secrets at the specified paths, allowing for incremental updates and corrections:
+### Incremental updates
 
 ```bash
 # Initial seed
@@ -542,9 +486,7 @@ vault-envrc-generator seed --config additional-secrets.yaml
 vault-envrc-generator seed --config updated-config.yaml
 ```
 
-### Validation and Testing
-
-Validate seed configurations before deployment:
+### Validation and testing
 
 ```bash
 # Test configuration parsing
@@ -557,11 +499,9 @@ vault-envrc-generator seed --config production-seed.yaml --dry-run --log-level d
 VAULT_ADDR=http://dev-vault:8200 vault-envrc-generator seed --config production-seed.yaml --dry-run
 ```
 
-## Security Considerations
+## Security
 
-### File Permissions
-
-Ensure seed configuration files and referenced files have appropriate permissions:
+### File permissions
 
 ```bash
 # Secure the seed configuration file
@@ -576,9 +516,7 @@ chmod 600 ~/.ssh/id_rsa
 chmod 644 ~/.ssh/id_rsa.pub
 ```
 
-### Token Scope
-
-Use tokens with minimal required permissions for seed operations:
+### Token scope
 
 ```hcl
 # Example Vault policy for seed operations
@@ -591,9 +529,7 @@ path "secrets/personal/{{identity.entity.metadata.oidc_user_id}}/*" {
 }
 ```
 
-### Audit Trail
-
-Seed operations are logged for audit purposes:
+### Audit
 
 ```bash
 # Enable audit logging
@@ -603,9 +539,7 @@ vault-envrc-generator seed --config production-seed.yaml --log-level info
 vault audit list
 ```
 
-### Data Validation
-
-Validate sensitive data before seeding:
+### Data validation
 
 ```bash
 # Verify file contents before seeding
@@ -620,9 +554,7 @@ jq . ~/config/app.json
 
 ## Troubleshooting
 
-### Common Issues
-
-**File Not Found Errors**:
+### File not found
 ```bash
 # Verify file paths
 ls -la ~/.ssl/server.crt
@@ -632,7 +564,7 @@ ls -la ~/config/app.json
 stat ~/.ssl/server.key
 ```
 
-**Environment Variable Issues**:
+### Environment variables
 ```bash
 # Verify environment variables are set
 env | grep DATABASE_PASSWORD
@@ -642,7 +574,7 @@ printenv OPENAI_API_KEY
 vault-envrc-generator seed --config config.yaml --dry-run --log-level debug
 ```
 
-**Template Rendering Errors**:
+### Template errors
 ```bash
 # Check token information
 vault token lookup -format=json
@@ -654,7 +586,7 @@ vault token lookup -format=json | jq '.data.meta'
 vault-envrc-generator seed --config config.yaml --dry-run
 ```
 
-**Vault Permission Errors**:
+### Vault permissions
 ```bash
 # Check token capabilities
 vault token capabilities secrets/environments/development/database
@@ -663,9 +595,7 @@ vault token capabilities secrets/environments/development/database
 vault kv get secrets/environments/development/test
 ```
 
-The seed command provides a comprehensive solution for populating Vault with secrets from local sources. By understanding the configuration format and following operational best practices, you can create reliable, repeatable processes for managing secret data across different environments and use cases.
-
-For practical examples and getting started guidance, see:
+For practical examples and getting started, see:
 
 ```
 vault-envrc-generator help vault-envrc-getting-started

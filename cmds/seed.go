@@ -21,8 +21,8 @@ import (
 type SeedCommand struct{ *gcmds.CommandDescription }
 
 type SeedSettings struct {
-	Config string `glazed.parameter:"config"`
-	DryRun bool   `glazed.parameter:"dry-run"`
+	Config   string   `glazed.parameter:"config"`
+	DryRun   bool     `glazed.parameter:"dry-run"`
 	BasePath string   `glazed.parameter:"base-path"`
 	Sets     []string `glazed.parameter:"sets"`
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	clay "github.com/go-go-golems/clay/pkg"
 	"github.com/go-go-golems/glazed/pkg/cli"
 	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
@@ -9,7 +10,6 @@ import (
 	"github.com/go-go-golems/glazed/pkg/help"
 	help_cmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	"github.com/spf13/cobra"
-	clay "github.com/go-go-golems/clay/pkg"
 
 	appcmds "github.com/go-go-golems/vault-envrc-generator/cmds"
 	appdoc "github.com/go-go-golems/vault-envrc-generator/pkg/doc"
@@ -52,7 +52,8 @@ func main() {
 		},
 	}
 
-	clay.InitViper("vault-envrc-generator", rootCmd)
+	err := clay.InitViper("vault-envrc-generator", rootCmd)
+	cobra.CheckErr(err)
 
 	// Help system
 	hs := help.NewHelpSystem()
@@ -60,10 +61,10 @@ func main() {
 	help_cmd.SetupCobraRootCommand(hs, rootCmd)
 
 	opts := []cli.CobraOption{
-            cli.WithParserConfig(cli.CobraParserConfig{
-                // ShortHelpLayers: []string{layers.DefaultSlug},
-                MiddlewaresFunc: getMiddlewares,
-            }),
+		cli.WithParserConfig(cli.CobraParserConfig{
+			// ShortHelpLayers: []string{layers.DefaultSlug},
+			MiddlewaresFunc: getMiddlewares,
+		}),
 	}
 
 	// Register commands
@@ -117,6 +118,14 @@ func main() {
 
 	if vc, err := appcmds.NewValidateCommand(); err == nil {
 		cmd, err := cli.BuildCobraCommand(vc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
+	if tc2, err := appcmds.NewTreeCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(tc2, opts...)
 		cobra.CheckErr(err)
 		rootCmd.AddCommand(cmd)
 	} else {

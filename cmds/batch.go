@@ -20,13 +20,15 @@ import (
 type BatchCommand struct{ *gcmds.CommandDescription }
 
 type BatchSettings struct {
-	Config          string `glazed.parameter:"config"`
-	OutputOverride  string `glazed.parameter:"output"`
-	Format          string `glazed.parameter:"format"`
-	ContinueOnError bool   `glazed.parameter:"continue-on-error"`
-	DryRun          bool   `glazed.parameter:"dry-run"`
-	SortKeys        bool   `glazed.parameter:"sort-keys"`
-	BasePath        string `glazed.parameter:"base-path"`
+	Config          string   `glazed.parameter:"config"`
+	OutputOverride  string   `glazed.parameter:"output"`
+	Format          string   `glazed.parameter:"format"`
+	ContinueOnError bool     `glazed.parameter:"continue-on-error"`
+	DryRun          bool     `glazed.parameter:"dry-run"`
+	SortKeys        bool     `glazed.parameter:"sort-keys"`
+	BasePath        string   `glazed.parameter:"base-path"`
+	Jobs            []string `glazed.parameter:"jobs"`
+	Sections        []string `glazed.parameter:"sections"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
@@ -46,6 +48,8 @@ func NewBatchCommand() (*BatchCommand, error) {
 			parameters.NewParameterDefinition("continue-on-error", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Continue processing on errors")),
 			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Preview outputs without writing files")),
 			parameters.NewParameterDefinition("sort-keys", parameters.ParameterTypeBool, parameters.WithDefault(true), parameters.WithHelp("Sort JSON/YAML keys for deterministic output")),
+			parameters.NewParameterDefinition("jobs", parameters.ParameterTypeStringList, parameters.WithHelp("Only process jobs with these names; default all")),
+			parameters.NewParameterDefinition("sections", parameters.ParameterTypeStringList, parameters.WithHelp("Only process sections with these names; default all")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -81,6 +85,38 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	cfg, err := loadBatchConfig(s.Config)
 	if err != nil {
 		return err
+	}
+	// Apply job/section filtering if requested
+	if len(s.Jobs) > 0 {
+		allowedJobs := map[string]struct{}{}
+		for _, name := range s.Jobs {
+			allowedJobs[name] = struct{}{}
+		}
+		filteredJobs := make([]batch.Job, 0, len(cfg.Jobs))
+		for _, job := range cfg.Jobs {
+			if _, ok := allowedJobs[job.Name]; ok {
+				filteredJobs = append(filteredJobs, job)
+			}
+		}
+		cfg.Jobs = filteredJobs
+	}
+	if len(s.Sections) > 0 {
+		allowedSecs := map[string]struct{}{}
+		for _, name := range s.Sections {
+			allowedSecs[name] = struct{}{}
+		}
+		for ji, job := range cfg.Jobs {
+			if len(job.Sections) == 0 {
+				continue
+			}
+			newSecs := make([]batch.Section, 0, len(job.Sections))
+			for _, sec := range job.Sections {
+				if _, ok := allowedSecs[sec.Name]; ok {
+					newSecs = append(newSecs, sec)
+				}
+			}
+			cfg.Jobs[ji].Sections = newSecs
+		}
 	}
 	proc := batch.Processor{Client: client}
 	return proc.Process(cfg, batch.ProcessorOptions{

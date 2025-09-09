@@ -1,10 +1,13 @@
 package seed
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
@@ -13,13 +16,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Options struct{ DryRun bool }
+type Options struct {
+	DryRun            bool
+	ForceOverwrite    bool
+	AllowCommands     bool
+	ExtraTemplateData map[string]interface{}
+}
+
+type userDecision int
+
+const (
+	decNo userDecision = iota
+	decYes
+	decAllYes
+	decAllNo
+)
 
 func Run(client *vault.Client, spec *Spec, opts Options) error {
 	// Build template context from token for rendering templated paths
 	tctx, err := vault.BuildTemplateContext(client)
 	if err != nil {
 		return fmt.Errorf("failed to build template context: %w", err)
+	}
+	// Initialize Extra and merge in extra template data
+	if tctx.Extra == nil {
+		tctx.Extra = map[string]interface{}{}
+	}
+	for k, v := range opts.ExtraTemplateData {
+		tctx.Extra[k] = v
+	}
+	// Default commonly used flags
+	if _, ok := tctx.Extra["skip_generate"]; !ok {
+		tctx.Extra["skip_generate"] = false
 	}
 
 	// Resolve base path: YAML has priority; render templates
@@ -36,6 +64,12 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 	}
 
 	log.Info().Str("base_path", base).Int("sets_total", len(spec.Sets)).Msg("seed: start")
+
+	// Interactive state flags
+	overwriteAllAllow := false
+	overwriteAllSkip := false
+	commandAllRun := false
+	commandAllSkip := false
 
 	for i, set := range spec.Sets {
 		// Determine target path: join with base if relative; error if relative without base
@@ -122,6 +156,152 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			}
 		}
 
+		// Prepare context with current data for command templates
+		if tctx.Data == nil {
+			tctx.Data = map[string]interface{}{}
+		}
+		for dk, dv := range data {
+			tctx.Data[dk] = dv
+		}
+
+		// Run setup_commands: populate tctx.Data but do not persist into data map
+		if len(set.SetupCommands) > 0 {
+			executed := map[string]bool{}
+			keys := make([]string, 0, len(set.SetupCommands))
+			for k := range set.SetupCommands {
+				keys = append(keys, k)
+			}
+			// Attempt multiple passes to satisfy dependencies
+			for pass := 0; pass < len(keys); pass++ {
+				progress := false
+				for _, k := range keys {
+					if executed[k] {
+						continue
+					}
+					command := set.SetupCommands[k]
+					cmdStr, err := vault.RenderTemplateString(command, tctx)
+					if err != nil {
+						// Defer if missing .Data dependency
+						if isMissingDataKeyError(err) {
+							continue
+						}
+						return fmt.Errorf("set %d: failed to render setup command '%s': %w", i+1, k, err)
+					}
+					if strings.TrimSpace(cmdStr) == "" {
+						executed[k] = true
+						progress = true
+						continue
+					}
+					if opts.DryRun {
+						log.Debug().Str("key", k).Str("path", renderedTarget).Msg("seed: dry-run setup command")
+						executed[k] = true
+						progress = true
+						continue
+					}
+					if !opts.AllowCommands {
+						if commandAllSkip {
+							executed[k] = true
+							progress = true
+							continue
+						}
+						if !commandAllRun {
+							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, renderedTarget, cmdStr)
+							dec := askForDecision(prompt)
+							switch dec {
+							case decYes:
+								// proceed
+							case decAllYes:
+								commandAllRun = true
+							case decAllNo:
+								commandAllSkip = true
+								fallthrough
+							case decNo:
+								executed[k] = true
+								progress = true
+								continue
+							}
+						}
+					}
+					out, err := runShellCommand(cmdStr)
+					if err != nil {
+						return fmt.Errorf("set %d: setup command '%s' failed: %w", i+1, k, err)
+					}
+					val := strings.TrimSpace(out)
+					if val != "" {
+						tctx.Data[k] = val
+					}
+					executed[k] = true
+					progress = true
+				}
+				if !progress {
+					break
+				}
+			}
+			// Verify all executed
+			for _, k := range keys {
+				if !executed[k] {
+					return fmt.Errorf("set %d: unsatisfied setup command dependencies; could not render '%s'", i+1, k)
+				}
+			}
+		}
+
+		// Process commands (execute and capture stdout; command string can be templated)
+		if len(set.Commands) > 0 {
+			// deterministic execution order to allow dependencies
+			keys := make([]string, 0, len(set.Commands))
+			for k := range set.Commands {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				command := set.Commands[k]
+				cmdStr, err := vault.RenderTemplateString(command, tctx)
+				if err != nil {
+					return fmt.Errorf("set %d: failed to render command for key '%s': %w", i+1, k, err)
+				}
+				if strings.TrimSpace(cmdStr) == "" {
+					log.Debug().Str("key", k).Str("path", renderedTarget).Msg("seed: skipping empty command after template rendering")
+					continue
+				}
+				if opts.DryRun {
+					data[k] = fmt.Sprintf("<command: %s>", cmdStr)
+					continue
+				}
+				if !opts.AllowCommands {
+					if commandAllSkip {
+						continue
+					}
+					if !commandAllRun {
+						prompt := fmt.Sprintf("Run command for key '%s' at path '%s'? [y/N/a/s]: %s ", k, renderedTarget, cmdStr)
+						dec := askForDecision(prompt)
+						switch dec {
+						case decYes:
+							// proceed
+						case decAllYes:
+							commandAllRun = true
+						case decAllNo:
+							commandAllSkip = true
+							continue
+						case decNo:
+							continue
+						}
+					}
+				}
+				out, err := runShellCommand(cmdStr)
+				if err != nil {
+					return fmt.Errorf("set %d: command for key '%s' failed: %w", i+1, k, err)
+				}
+				val := strings.TrimSpace(out)
+				if val == "" {
+					// do not overwrite existing data with empty output
+					continue
+				}
+				data[k] = val
+				// make it available to subsequent command templates
+				tctx.Data[k] = val
+			}
+		}
+
 		log.Debug().
 			Int("index", i+1).
 			Str("set_name", set.Name).
@@ -133,7 +313,6 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			Int("file_keys", len(set.Files)).
 			Int("json_file_keys", len(set.JsonFiles)).
 			Int("yaml_file_keys", len(set.YamlFiles)).
-			Strs("missing_env", missingEnv).
 			Msg("seed: resolved set")
 
 		if len(data) == 0 {
@@ -146,10 +325,91 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			continue
 		}
 
+		// Handle overwrite confirmations when existing values are present
+		if !opts.ForceOverwrite {
+			existing, err := client.GetSecrets(renderedTarget)
+			if err != nil {
+				// if not found, skip prompting; otherwise propagate error
+				if !isNotFoundError(err) {
+					return fmt.Errorf("failed to check existing secrets at %s: %w", renderedTarget, err)
+				}
+			} else if len(existing) > 0 {
+				for key := range data {
+					if _, ok := existing[key]; ok {
+						if overwriteAllSkip {
+							delete(data, key)
+							continue
+						}
+						if !overwriteAllAllow {
+							prompt := fmt.Sprintf("Key '%s' exists at '%s'. Overwrite? [y/N/a/s]: ", key, renderedTarget)
+							dec := askForDecision(prompt)
+							switch dec {
+							case decYes:
+								// keep value in data
+							case decAllYes:
+								overwriteAllAllow = true
+							case decAllNo:
+								overwriteAllSkip = true
+								fallthrough
+							case decNo:
+								delete(data, key)
+								continue
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if len(data) == 0 {
+			log.Debug().Str("path", renderedTarget).Msg("seed: skipping write (no data after confirmations)")
+			continue
+		}
+
 		if err := client.PutSecrets(renderedTarget, data); err != nil {
 			return fmt.Errorf("failed to write %s: %w", renderedTarget, err)
 		}
 		log.Info().Str("path", renderedTarget).Int("keys", len(data)).Msg("seed: wrote secrets")
+
+		// Run cleanup_commands after writing (no persistence)
+		if len(set.CleanupCommands) > 0 {
+			for _, cmdT := range set.CleanupCommands {
+				cmdStr, err := vault.RenderTemplateString(cmdT, tctx)
+				if err != nil {
+					return fmt.Errorf("set %d: failed to render cleanup command: %w", i+1, err)
+				}
+				if strings.TrimSpace(cmdStr) == "" {
+					continue
+				}
+				if opts.DryRun {
+					log.Debug().Str("path", renderedTarget).Msg("seed: dry-run cleanup command")
+					continue
+				}
+				if !opts.AllowCommands {
+					if commandAllSkip {
+						continue
+					}
+					if !commandAllRun {
+						prompt := fmt.Sprintf("Run cleanup at '%s'? [y/N/a/s]: %s ", renderedTarget, cmdStr)
+						dec := askForDecision(prompt)
+						switch dec {
+						case decYes:
+							// proceed
+						case decAllYes:
+							commandAllRun = true
+						case decAllNo:
+							commandAllSkip = true
+							continue
+						case decNo:
+							continue
+						}
+					}
+				}
+				if _, err := runShellCommand(cmdStr); err != nil {
+					return fmt.Errorf("set %d: cleanup command failed: %w", i+1, err)
+				}
+			}
+		}
 	}
 	log.Info().Msg("seed: completed")
 	return nil
@@ -161,6 +421,49 @@ func keysOf(m map[string]interface{}) []string {
 		ks = append(ks, k)
 	}
 	return ks
+}
+
+// askForDecision prompts the user for y/N/a/s and returns a decision
+func askForDecision(prompt string) userDecision {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	answer := strings.TrimSpace(strings.ToLower(line))
+	switch answer {
+	case "y", "yes":
+		return decYes
+	case "a", "all":
+		return decAllYes
+	case "s", "skip", "sa", "skipall", "skip-all":
+		return decAllNo
+	default:
+		return decNo
+	}
+}
+
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "no secret found at path") || strings.Contains(s, "no secret found at KV v2 path")
+}
+
+func isMissingDataKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "map has no entry for key") || strings.Contains(s, "can't evaluate field")
+}
+
+func runShellCommand(command string) (string, error) {
+	cmd := exec.Command("/bin/sh", "-c", command)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // processJsonFile reads a JSON file and applies key transforms

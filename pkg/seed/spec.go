@@ -6,13 +6,16 @@ type Spec struct {
 }
 
 type Set struct {
-	Name      string                       `yaml:"name,omitempty"`
-	Path      string                       `yaml:"path"`
-	Data      map[string]string            `yaml:"data"`
-	Env       map[string]string            `yaml:"env"`
-	Files     map[string]string            `yaml:"files"`
-	JsonFiles map[string]JsonFileTransform `yaml:"json_files"`
-	YamlFiles map[string]YamlFileTransform `yaml:"yaml_files"`
+	Name            string                       `yaml:"name,omitempty"`
+	Path            string                       `yaml:"path"`
+	Data            map[string]string            `yaml:"data"`
+	Env             map[string]string            `yaml:"env"`
+	Files           map[string]string            `yaml:"files"`
+	Commands        map[string]string            `yaml:"commands"`
+	SetupCommands   map[string]string            `yaml:"setup_commands"`
+	CleanupCommands []string                     `yaml:"cleanup_commands"`
+	JsonFiles       map[string]JsonFileTransform `yaml:"json_files"`
+	YamlFiles       map[string]YamlFileTransform `yaml:"yaml_files"`
 }
 
 // JsonFileTransform defines how to extract and transform data from JSON files

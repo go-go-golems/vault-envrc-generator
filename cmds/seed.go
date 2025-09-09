@@ -2,8 +2,10 @@ package cmds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
@@ -21,10 +23,14 @@ import (
 type SeedCommand struct{ *gcmds.CommandDescription }
 
 type SeedSettings struct {
-	Config   string   `glazed.parameter:"config"`
-	DryRun   bool     `glazed.parameter:"dry-run"`
-	BasePath string   `glazed.parameter:"base-path"`
-	Sets     []string `glazed.parameter:"sets"`
+	Config    string   `glazed.parameter:"config"`
+	DryRun    bool     `glazed.parameter:"dry-run"`
+	BasePath  string   `glazed.parameter:"base-path"`
+	Sets      []string `glazed.parameter:"sets"`
+	Force     bool     `glazed.parameter:"force"`
+	AllowCmd  bool     `glazed.parameter:"allow-commands"`
+	ExtraKV   []string `glazed.parameter:"extra"`
+	ExtraFile string   `glazed.parameter:"extra-file"`
 }
 
 func NewSeedCommand() (*SeedCommand, error) {
@@ -41,6 +47,10 @@ func NewSeedCommand() (*SeedCommand, error) {
 			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Preview without writing to Vault")),
 			parameters.NewParameterDefinition("base-path", parameters.ParameterTypeString, parameters.WithHelp("Override base_path (supports Go templates)")),
 			parameters.NewParameterDefinition("sets", parameters.ParameterTypeStringList, parameters.WithHelp("Only seed sets whose path matches any of these; default all")),
+			parameters.NewParameterDefinition("force", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite existing keys without prompting")),
+			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run commands in spec without confirmation")),
+			parameters.NewParameterDefinition("extra", parameters.ParameterTypeStringList, parameters.WithHelp("Additional template data key=value pairs")),
+			parameters.NewParameterDefinition("extra-file", parameters.ParameterTypeString, parameters.WithHelp("YAML or JSON file with additional template data")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -116,7 +126,41 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 		}
 	}
 
-	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun})
+	// Build extra template data from flags
+	extra := map[string]interface{}{}
+	for _, kv := range s.ExtraKV {
+		if kv == "" {
+			continue
+		}
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) == 2 {
+			extra[parts[0]] = parts[1]
+		}
+	}
+	if s.ExtraFile != "" {
+		content, err := os.ReadFile(s.ExtraFile)
+		if err != nil {
+			return fmt.Errorf("failed to read extra-file: %w", err)
+		}
+		// Try YAML first, then JSON
+		var obj map[string]interface{}
+		if err := yaml.Unmarshal(content, &obj); err != nil {
+			var objJSON map[string]interface{}
+			if err2 := json.Unmarshal(content, &objJSON); err2 == nil {
+				for k, v := range objJSON {
+					extra[k] = v
+				}
+			} else {
+				return fmt.Errorf("failed to parse extra-file as YAML or JSON: %v / %v", err, err2)
+			}
+		} else {
+			for k, v := range obj {
+				extra[k] = v
+			}
+		}
+	}
+
+	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun, ForceOverwrite: s.Force, AllowCommands: s.AllowCmd, ExtraTemplateData: extra})
 }
 
 var _ gcmds.BareCommand = &SeedCommand{}

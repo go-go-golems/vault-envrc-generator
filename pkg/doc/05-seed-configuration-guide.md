@@ -28,7 +28,7 @@ The `seed` command writes secrets to Vault from local sources (static values, en
 
 ## Seed Configuration Structure
 
-Seed configurations define target Vault paths and data sources. Supported sources: `data` (static), `env` (environment variables), `files` (file contents).
+Seed configurations define target Vault paths and data sources. Supported sources: `data` (static), `env` (environment variables), `files` (file contents), `json_files`, `yaml_files`, and `commands` (shell commands; output captured as value).
 
 ### Top-Level Configuration
 
@@ -60,6 +60,7 @@ Template variables:
 - `{{ .Token.DisplayName }}` - Human-readable token display name  
 - `{{ .Token.EntityID }}` - Vault entity identifier
 - `{{ .Token.Meta.key }}` - Token metadata values (e.g., environment, team, role)
+- `{{ .Extra.key }}` - Additional template data from CLI flags (see below)
 
 Examples:
 ```yaml
@@ -109,6 +110,12 @@ sets:
 | `files` | object | | File content mappings (vault_key: file_path) |
 | `json_files` | object | | JSON file with transforms (vault_key: {file, transforms}) |
 | `yaml_files` | object | | YAML file with transforms (vault_key: {file, transforms}) |
+| `commands` | object | | Shell commands to run (vault_key: command string). Output becomes the value |
+
+Notes:
+- `commands` entries are rendered as Go templates before execution (have access to `.Token` and `.Extra`).
+- By default, each command prompts for confirmation before running. Use `--allow-commands` to skip prompts.
+- Command outputs are trimmed and stored as string values.
 
 ### Path resolution
 
@@ -213,7 +220,7 @@ sets:
 
   - path: app/config
     files:
-      database_config: ~/config/database.json
+      database_config: ~/config/app-development.json
       logging_config: ~/config/logging.yaml
       feature_flags: ~/config/features.toml
 ```
@@ -252,17 +259,6 @@ sets:
           client_email: "client_email"
           private_key_id: "private_key_id"
           private_key: "private_key"
-
-  - path: monitoring/config
-    json_files:
-      # Extract monitoring endpoints from complex config
-      endpoints:
-        file: ~/config/monitoring.json
-        transforms:
-          prometheus_url: "services.prometheus.endpoint"
-          grafana_url: "services.grafana.endpoint"
-          alertmanager_url: "services.alertmanager.endpoint"
-          first_server: "servers.0.hostname"  # Array indexing
 ```
 
 Path syntax: dot notation with array indexing support (`servers.0.name`, `config.database.host`).
@@ -286,27 +282,6 @@ sets:
           image: "spec.template.spec.containers.0.image"
           service_account: "spec.template.spec.serviceAccountName"
           namespace: "metadata.namespace"
-
-  - path: helm/values
-    yaml_files:
-      # Extract Helm chart values
-      chart_config:
-        file: ~/charts/myapp/values.yaml
-        transforms:
-          replicas: "replicaCount"
-          image_tag: "image.tag"
-          db_host: "postgresql.host"
-          redis_url: "redis.url"
-
-  - path: ci/config
-    yaml_files:
-      # Extract CI/CD pipeline configuration
-      pipeline_config:
-        file: ~/.github/workflows/deploy.yml
-        transforms:
-          docker_registry: "env.DOCKER_REGISTRY"
-          k8s_cluster: "env.KUBERNETES_CLUSTER"
-          deploy_branch: "on.push.branches.0"
 ```
 
 Format support: standard YAML; multi-document files use first document; anchors and aliases resolved.
@@ -314,6 +289,27 @@ Format support: standard YAML; multi-document files use first document; anchors 
 Behavior: identical to JSON transforms; YAML-specific features preserved during parsing.
 
 Use cases: Kubernetes manifests, Helm values, CI/CD configs, Docker Compose files.
+
+### Command execution (`commands`)
+
+Run shell commands and store their stdout as secret values. Useful to generate random secrets or derive values dynamically.
+
+```yaml
+sets:
+  - path: resources/identity/crypto
+    commands:
+      jwt_secret: "openssl rand -base64 48"
+      oauth_enc_key: "head -c 32 /dev/urandom | base64"
+```
+
+Behavior and safety:
+- Commands are rendered as templates; you can use `{{ .Token.* }}` and `{{ .Extra.* }}`.
+- By default each command asks for confirmation. Use `--allow-commands` to skip prompts in non-interactive contexts.
+- Use `--dry-run` to preview without running commands.
+- Use `--force` to overwrite existing keys without prompting; otherwise you will be asked per key when a value already exists.
+
+Limitations:
+- RSA keypair generation requires producing consistent private/public pairs; prefer generating to temporary files and seeding via `files` source, or pre-seed externally and mirror into your namespace.
 
 ## Combining sources
 
@@ -350,314 +346,48 @@ sets:
           replicas: "spec.replicas"
 ```
 
-Rules: merged into one secret; key conflicts error; processing order `data` → `env` → `files` → `json_files` → `yaml_files`; empty values are written.
+Rules: merged into one secret; key conflicts error; processing order `data` → `env` → `files` → `json_files` → `yaml_files` → `commands`; empty values are written.
 
 ## Template integration
 
 ### Template Context
 
-Templates have access to comprehensive token information:
+Templates have access to comprehensive token information and any extra data you pass via CLI flags.
 
 ```yaml
 # Template context structure
 Token:
-  OIDCUserID: "user123"              # Extracted from OIDC tokens
-  DisplayName: "oidc-user123"        # Token display name
-  EntityID: "entity-abc123"          # Vault entity identifier
-  Meta:                              # Token metadata
+  OIDCUserID: "user123"
+  DisplayName: "oidc-user123"
+  Meta:
     environment: "development"
     team: "platform"
-    role: "developer"
-  Policies: ["default", "developer"] # Assigned policies
+Extra:
+  env: "development"
+  team: "platform"
 ```
 
-### Dynamic path examples
+### CLI flags for template data
 
-```yaml
-# User-specific development secrets
-base_path: secrets/personal/{{ .Token.OIDCUserID }}/development
-sets:
-  - path: database
-    data:
-      environment: "{{ .Token.Meta.environment }}"
-      user: "{{ .Token.OIDCUserID }}"
-
-# Environment-specific configuration
-base_path: secrets/environments/{{ .Token.Meta.environment }}
-sets:
-  - path: shared/database
-    env:
-      host: "{{ .Token.Meta.environment | upper }}_DATABASE_HOST"
-      password: "{{ .Token.Meta.environment | upper }}_DATABASE_PASSWORD"
-
-# Conditional paths based on user role
-sets:
-  - path: "{{- if eq .Token.Meta.role \"admin\" }}admin/secrets{{- else }}user/secrets{{- end }}"
-    data:
-      access_level: "{{ .Token.Meta.role }}"
-```
-
-## Examples
-
-### Development environment bootstrap
-
-```yaml
-base_path: secrets/environments/development/personal/{{ .Token.OIDCUserID }}
-
-sets:
-  # Database configuration
-  - path: database/primary
-    data:
-      provider: "postgresql"
-      port: "5432"
-      ssl_mode: "disable"
-      max_connections: "10"
-    env:
-      host: DEV_DATABASE_HOST
-      database: DEV_DATABASE_NAME
-      username: DEV_DATABASE_USER
-      password: DEV_DATABASE_PASSWORD
-
-  # External API credentials
-  - path: apis/external
-    env:
-      openai_api_key: OPENAI_API_KEY
-      github_token: GITHUB_TOKEN
-      slack_webhook: SLACK_WEBHOOK_URL
-      datadog_api_key: DATADOG_API_KEY
-
-  # OAuth configuration
-  - path: oauth/google
-    data:
-      provider: "google"
-      redirect_uri: "http://localhost:3000/auth/callback"
-      scope: "openid profile email"
-    env:
-      client_id: GOOGLE_CLIENT_ID
-      client_secret: GOOGLE_CLIENT_SECRET
-    files:
-      service_account: ~/credentials/google-service-account.json
-
-  # SSL certificates for local development
-  - path: certificates/local
-    files:
-      ca_cert: ~/.ssl/ca.pem
-      server_cert: ~/.ssl/localhost.crt
-      server_key: ~/.ssl/localhost.key
-
-  # SSH keys for deployment
-  - path: ssh/deployment
-    files:
-      private_key: ~/.ssh/deploy_key
-      public_key: ~/.ssh/deploy_key.pub
-      known_hosts: ~/.ssh/known_hosts
-
-  # Application configuration
-  - path: app/config
-    data:
-      log_level: "debug"
-      feature_flags:
-        - "new_ui"
-        - "advanced_metrics"
-      cache_ttl: "300s"
-    files:
-      app_config: ~/config/app-development.json
-```
-
-### Migration from environment variables
-
-```yaml
-base_path: secrets/migration/{{ .Token.Meta.environment }}
-
-sets:
-  # Web application secrets
-  - path: web/app
-    env:
-      secret_key: SECRET_KEY
-      session_secret: SESSION_SECRET
-      csrf_token: CSRF_TOKEN
-      jwt_secret: JWT_SECRET
-
-  # Database connections
-  - path: databases/primary
-    env:
-      url: DATABASE_URL
-      host: DATABASE_HOST
-      port: DATABASE_PORT
-      name: DATABASE_NAME
-      user: DATABASE_USER
-      password: DATABASE_PASSWORD
-
-  # Redis configuration
-  - path: cache/redis
-    env:
-      url: REDIS_URL
-      password: REDIS_PASSWORD
-      max_connections: REDIS_MAX_CONNECTIONS
-
-  # External service credentials
-  - path: services/external
-    env:
-      stripe_secret_key: STRIPE_SECRET_KEY
-      stripe_webhook_secret: STRIPE_WEBHOOK_SECRET
-      sendgrid_api_key: SENDGRID_API_KEY
-      aws_access_key_id: AWS_ACCESS_KEY_ID
-      aws_secret_access_key: AWS_SECRET_ACCESS_KEY
-
-  # Monitoring and observability
-  - path: monitoring
-    env:
-      datadog_api_key: DD_API_KEY
-      datadog_app_key: DD_APP_KEY
-      sentry_dsn: SENTRY_DSN
-      prometheus_token: PROMETHEUS_TOKEN
-```
-
-### Certificate and key management
-
-```yaml
-base_path: secrets/certificates/{{ .Token.Meta.environment }}
-
-sets:
-  # Root CA certificates
-  - path: ca/root
-    data:
-      issuer: "Company Internal CA"
-      validity_period: "10 years"
-    files:
-      ca_cert: /etc/ssl/certs/company-ca.pem
-      ca_key: /etc/ssl/private/company-ca-key.pem
-      ca_bundle: /etc/ssl/certs/ca-bundle.pem
-
-  # Web server certificates
-  - path: web/ssl
-    data:
-      common_name: "*.company.com"
-      san_domains:
-        - "company.com"
-        - "api.company.com"
-        - "app.company.com"
-    files:
-      server_cert: ~/.ssl/server.crt
-      server_key: ~/.ssl/server.key
-      intermediate_cert: ~/.ssl/intermediate.crt
-
-  # Client certificates for mutual TLS
-  - path: client/mtls
-    files:
-      client_cert: ~/.ssl/client.crt
-      client_key: ~/.ssl/client.key
-      ca_cert: ~/.ssl/ca.pem
-
-  # SSH host keys
-  - path: ssh/host-keys
-    files:
-      rsa_host_key: /etc/ssh/ssh_host_rsa_key
-      rsa_host_cert: /etc/ssh/ssh_host_rsa_key.pub
-      ed25519_host_key: /etc/ssh/ssh_host_ed25519_key
-      ed25519_host_cert: /etc/ssh/ssh_host_ed25519_key.pub
-
-  # Application signing keys
-  - path: signing/jwt
-    data:
-      algorithm: "RS256"
-      key_size: "2048"
-    files:
-      private_key: ~/.keys/jwt-signing.key
-      public_key: ~/.keys/jwt-signing.pub
-```
-
-### JSON/YAML configuration extraction
-
-```yaml
-base_path: secrets/config/{{ .Token.Meta.environment }}
-
-sets:
-  # Extract database configuration from app config file
-  - path: database/primary
-    json_files:
-      db_config:
-        file: ~/config/app.json
-        transforms:
-          host: "database.primary.host"
-          port: "database.primary.port"
-          name: "database.primary.database"
-          username: "database.primary.username"
-          password: "database.primary.password"
-          ssl_mode: "database.primary.ssl.mode"
-          max_connections: "database.primary.pool.max_connections"
-
-  # Extract service credentials from Google Cloud service account
-  - path: gcp/service-account
-    json_files:
-      gcp_credentials:
-        file: ~/credentials/gcp-service-account.json
-        transforms:
-          project_id: "project_id"
-          client_id: "client_id"
-          client_email: "client_email"
-          private_key_id: "private_key_id"
-          private_key: "private_key"
-
-  # Extract Kubernetes deployment configuration
-  - path: k8s/deployment
-    yaml_files:
-      app_deployment:
-        file: ~/k8s/app-deployment.yaml
-        transforms:
-          namespace: "metadata.namespace"
-          app_name: "metadata.labels.app"
-          image: "spec.template.spec.containers.0.image"
-          replicas: "spec.replicas"
-          service_account: "spec.template.spec.serviceAccountName"
-
-  # Extract Helm values for chart deployment
-  - path: helm/values
-    yaml_files:
-      chart_values:
-        file: ~/charts/myapp/values.yaml
-        transforms:
-          image_tag: "image.tag"
-          image_repository: "image.repository"
-          ingress_host: "ingress.hosts.0.host"
-          storage_class: "persistence.storageClass"
-          storage_size: "persistence.size"
-
-  # Extract monitoring configuration from complex JSON
-  - path: monitoring/config
-    json_files:
-      monitoring_setup:
-        file: ~/config/monitoring.json
-        transforms:
-          prometheus_url: "services.prometheus.external_url"
-          grafana_admin_password: "services.grafana.security.admin_password"
-          alertmanager_webhook: "services.alertmanager.route.receiver"
-          first_target: "scrape_configs.0.static_configs.0.targets.0"
-
-  # Combine multiple sources for complete application config
-  - path: app/complete
-    data:
-      environment: "{{ .Token.Meta.environment }}"
-      deployed_by: "{{ .Token.DisplayName }}"
-    env:
-      secret_key: APP_SECRET_KEY
-      session_secret: SESSION_SECRET
-    json_files:
-      app_config:
-        file: ~/config/app.json
-        transforms:
-          debug_mode: "debug"
-          log_level: "logging.level"
-          cache_ttl: "cache.default_ttl"
-    yaml_files:
-      k8s_config:
-        file: ~/k8s/configmap.yaml
-        transforms:
-          api_version: "data.API_VERSION"
-          feature_flags: "data.FEATURE_FLAGS"
-```
+- `--extra key=value` (repeatable): add ad-hoc values accessible as `{{ .Extra.key }}`
+- `--extra-file file.(yaml|json)`: merge structured data into `.Extra`
 
 ## Operations
+
+### New flags
+
+```bash
+# Overwrite existing keys without prompting
+vault-envrc-generator seed --config config.yaml --force
+
+# Allow running commands without confirmation
+vault-envrc-generator seed --config config.yaml --allow-commands
+
+# Provide extra template data
+vault-envrc-generator seed --config config.yaml \
+  --extra env=development --extra team=platform \
+  --extra-file extra.yaml
+```
 
 ### Dry run
 
@@ -669,50 +399,9 @@ vault-envrc-generator seed --config development-setup.yaml --dry-run
 vault-envrc-generator seed --config development-setup.yaml --dry-run --log-level debug
 ```
 
-Dry run shows target paths, key counts, rendered templates, file/env resolution, and validation issues.
-
-### Incremental updates
-
-```bash
-# Initial seed
-vault-envrc-generator seed --config base-setup.yaml
-
-# Add additional secrets
-vault-envrc-generator seed --config additional-secrets.yaml
-
-# Update existing secrets
-vault-envrc-generator seed --config updated-config.yaml
-```
-
-### Validation and testing
-
-```bash
-# Test configuration parsing
-vault-envrc-generator seed --config production-seed.yaml --dry-run
-
-# Verify all files and environment variables are available
-vault-envrc-generator seed --config production-seed.yaml --dry-run --log-level debug
-
-# Test against development Vault first
-VAULT_ADDR=http://dev-vault:8200 vault-envrc-generator seed --config production-seed.yaml --dry-run
-```
+Dry run shows target paths, key counts, rendered templates, file/env/command resolution, and validation issues.
 
 ## Security
-
-### File permissions
-
-```bash
-# Secure the seed configuration file
-chmod 600 production-seed.yaml
-
-# Secure referenced certificate files
-chmod 600 ~/.ssl/*.key
-chmod 644 ~/.ssl/*.crt
-
-# Secure SSH keys
-chmod 600 ~/.ssh/id_rsa
-chmod 644 ~/.ssh/id_rsa.pub
-```
 
 ### Token scope
 
@@ -727,24 +416,11 @@ path "secrets/personal/{{identity.entity.metadata.oidc_user_id}}/*" {
 }
 ```
 
-### Audit
-
-```bash
-# Enable audit logging
-vault-envrc-generator seed --config production-seed.yaml --log-level info
-
-# Review audit logs in Vault
-vault audit list
-```
-
 ### Data validation
 
 ```bash
 # Verify file contents before seeding
 cat ~/.ssl/server.crt | openssl x509 -text -noout
-
-# Check environment variables
-echo $DATABASE_PASSWORD | wc -c  # Verify password length
 
 # Validate JSON configuration files
 jq . ~/config/app.json
@@ -752,46 +428,10 @@ jq . ~/config/app.json
 
 ## Troubleshooting
 
-### File not found
-```bash
-# Verify file paths
-ls -la ~/.ssl/server.crt
-ls -la ~/config/app.json
-
-# Check file permissions
-stat ~/.ssl/server.key
-```
-
-### Environment variables
-```bash
-# Verify environment variables are set
-env | grep DATABASE_PASSWORD
-printenv OPENAI_API_KEY
-
-# Check for typos in variable names
-vault-envrc-generator seed --config config.yaml --dry-run --log-level debug
-```
-
-### Template errors
-```bash
-# Check token information
-vault token lookup -format=json
-
-# Verify metadata availability
-vault token lookup -format=json | jq '.data.meta'
-
-# Test template rendering
-vault-envrc-generator seed --config config.yaml --dry-run
-```
-
-### Vault permissions
-```bash
-# Check token capabilities
-vault token capabilities secrets/environments/development/database
-
-# Verify path permissions
-vault kv get secrets/environments/development/test
-```
+- 403 on write with `secrets/metadata/...`: Use `secrets/...` base path (KV v2 data path).
+- Missing key errors during seed: Limit sets with `--sets` while iterating, fix mappings, or add source keys.
+- Commands not running: enable `--allow-commands` or answer prompts interactively.
+- Overwrites skipped: use `--force` to overwrite without prompting.
 
 For practical examples and getting started, see:
 

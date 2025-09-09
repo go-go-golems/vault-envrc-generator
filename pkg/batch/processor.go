@@ -21,13 +21,14 @@ type Processor struct {
 }
 
 type ProcessorOptions struct {
-	BasePath        string
-	OutputOverride  string
-	FormatOverride  string
-	ContinueOnError bool
-	DryRun          bool
-	SortKeys        bool
-	ForceOverwrite  bool
+	BasePath               string
+	OutputOverride         string
+	FormatOverride         string
+	ContinueOnError        bool
+	DryRun                 bool
+	SortKeys               bool
+	ForceOverwrite         bool
+	SkipUnreadableSections bool
 }
 
 func (p *Processor) Process(cfg *Config, opts ProcessorOptions) error {
@@ -137,6 +138,10 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			if strings.TrimSpace(renderedSourcePath) != "" {
 				s, err := p.Client.GetSecrets(renderedSourcePath)
 				if err != nil {
+					if opts.SkipUnreadableSections {
+						fmt.Fprintf(os.Stderr, "Warning: skipping unreadable section '%s' (%s): %v\n", sec.Name, renderedSourcePath, err)
+						continue
+					}
 					return fmt.Errorf("failed to retrieve secrets from path %s: %w", renderedSourcePath, err)
 				}
 				for k, v := range s {
@@ -434,6 +439,10 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 
 	secrets, err := p.Client.GetSecrets(renderedPath)
 	if err != nil {
+		if opts.SkipUnreadableSections {
+			fmt.Fprintf(os.Stderr, "Warning: skipping unreadable job '%s' path %s: %v\n", job.Name, renderedPath, err)
+			return nil
+		}
 		return fmt.Errorf("failed to retrieve secrets from path %s: %w", renderedPath, err)
 	}
 

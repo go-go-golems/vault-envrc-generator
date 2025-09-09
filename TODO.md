@@ -1,0 +1,5 @@
+- show versions in tree (because append only)
+- add metadata when seeding
+- show metadata in tree
+- show metadata when filling/overwriting
+- add 

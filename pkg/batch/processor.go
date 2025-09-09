@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,7 @@ type ProcessorOptions struct {
 	ContinueOnError bool
 	DryRun          bool
 	SortKeys        bool
+	ForceOverwrite  bool
 }
 
 func (p *Processor) Process(cfg *Config, opts ProcessorOptions) error {
@@ -305,7 +307,7 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			}
 		}
 
-		// flush aggregated envrc outputs (overwrite and warn)
+		// flush aggregated envrc outputs (ask confirmation before overwrite unless forced)
 		for outPath, b := range envrcFileBuffers {
 			if b.Len() == 0 {
 				continue
@@ -317,7 +319,16 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 				}
 			}
 			if fi, err := os.Stat(outPath); err == nil && fi.Mode().IsRegular() {
-				log.Warn().Str("path", outPath).Msg("overwriting existing .envrc file")
+				if !opts.ForceOverwrite {
+					ok, err := confirmOverwrite(outPath)
+					if err != nil {
+						return err
+					}
+					if !ok {
+						log.Info().Str("path", outPath).Msg("skipped overwrite of existing .envrc")
+						continue
+					}
+				}
 			}
 			if err := os.WriteFile(outPath, []byte(b.String()), 0644); err != nil {
 				return fmt.Errorf("failed to write envrc output to %s: %w", outPath, err)
@@ -492,7 +503,16 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			}
 		}
 		if fi, err := os.Stat(renderedOutput); err == nil && fi.Mode().IsRegular() {
-			log.Warn().Str("path", renderedOutput).Msg("overwriting existing .envrc file")
+			if !opts.ForceOverwrite {
+				ok, err := confirmOverwrite(renderedOutput)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					log.Info().Str("path", renderedOutput).Msg("skipped overwrite of existing .envrc")
+					return nil
+				}
+			}
 		}
 		if err := os.WriteFile(renderedOutput, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write envrc output to %s: %w", renderedOutput, err)
@@ -500,4 +520,17 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 		return nil
 	}
 	return output.Write(renderedOutput, []byte(content), output.WriteOptions{Format: options.Format, SortKeys: opts.SortKeys})
+}
+
+// confirmOverwrite prompts the user to confirm overwriting an existing file.
+// Returns true if overwrite is confirmed, false otherwise.
+func confirmOverwrite(path string) (bool, error) {
+	fmt.Printf("File %s already exists. Overwrite? [y/N]: ", path)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false, fmt.Errorf("failed to read confirmation: %w", err)
+	}
+	line = strings.TrimSpace(strings.ToLower(line))
+	return line == "y" || line == "yes", nil
 }

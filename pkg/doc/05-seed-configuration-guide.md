@@ -107,6 +107,8 @@ sets:
 | `data` | object | | Static key-value pairs written directly to Vault |
 | `env` | object | | Environment variable mappings (vault_key: ENV_VAR_NAME) |
 | `files` | object | | File content mappings (vault_key: file_path) |
+| `json_files` | object | | JSON file with transforms (vault_key: {file, transforms}) |
+| `yaml_files` | object | | YAML file with transforms (vault_key: {file, transforms}) |
 
 ### Path resolution
 
@@ -222,6 +224,97 @@ Behavior: read as text; binaries should be base64‑encoded; large files depend 
 
 Use cases: TLS/SSH keys, config files, licenses.
 
+### JSON files with transforms (`json_files`)
+
+JSON file mappings allow you to extract specific values from JSON configuration files using dot notation paths. This is particularly useful for extracting credentials, configuration values, or metadata from complex JSON structures.
+
+```yaml
+sets:
+  - path: database/config
+    json_files:
+      # Extract specific database configuration values
+      db_config:
+        file: ~/config/app.json
+        transforms:
+          host: "database.host"
+          port: "database.port"
+          username: "database.credentials.username"
+          password: "database.credentials.password"
+          ssl_mode: "database.options.ssl_mode"
+
+  - path: auth/oauth
+    json_files:
+      # Extract OAuth configuration from service account file
+      google_oauth:
+        file: ~/credentials/google-service-account.json
+        transforms:
+          client_id: "client_id"
+          client_email: "client_email"
+          private_key_id: "private_key_id"
+          private_key: "private_key"
+
+  - path: monitoring/config
+    json_files:
+      # Extract monitoring endpoints from complex config
+      endpoints:
+        file: ~/config/monitoring.json
+        transforms:
+          prometheus_url: "services.prometheus.endpoint"
+          grafana_url: "services.grafana.endpoint"
+          alertmanager_url: "services.alertmanager.endpoint"
+          first_server: "servers.0.hostname"  # Array indexing
+```
+
+Path syntax: dot notation with array indexing support (`servers.0.name`, `config.database.host`).
+
+Behavior: values converted to strings; missing paths fail the run; complex objects/arrays serialized as JSON strings.
+
+Use cases: service account files, complex configurations, API responses, deployment manifests.
+
+### YAML files with transforms (`yaml_files`)
+
+YAML file mappings work similarly to JSON files but parse YAML format. This is ideal for Kubernetes manifests, Helm values, and YAML-based configuration files.
+
+```yaml
+sets:
+  - path: k8s/secrets
+    yaml_files:
+      # Extract values from Kubernetes deployment
+      deployment_config:
+        file: ~/k8s/app-deployment.yaml
+        transforms:
+          image: "spec.template.spec.containers.0.image"
+          service_account: "spec.template.spec.serviceAccountName"
+          namespace: "metadata.namespace"
+
+  - path: helm/values
+    yaml_files:
+      # Extract Helm chart values
+      chart_config:
+        file: ~/charts/myapp/values.yaml
+        transforms:
+          replicas: "replicaCount"
+          image_tag: "image.tag"
+          db_host: "postgresql.host"
+          redis_url: "redis.url"
+
+  - path: ci/config
+    yaml_files:
+      # Extract CI/CD pipeline configuration
+      pipeline_config:
+        file: ~/.github/workflows/deploy.yml
+        transforms:
+          docker_registry: "env.DOCKER_REGISTRY"
+          k8s_cluster: "env.KUBERNETES_CLUSTER"
+          deploy_branch: "on.push.branches.0"
+```
+
+Format support: standard YAML; multi-document files use first document; anchors and aliases resolved.
+
+Behavior: identical to JSON transforms; YAML-specific features preserved during parsing.
+
+Use cases: Kubernetes manifests, Helm values, CI/CD configs, Docker Compose files.
+
 ## Combining sources
 
 ```yaml
@@ -240,9 +333,24 @@ sets:
       # Certificate data from files
       ssl_cert: ~/.ssl/app.crt
       ssl_key: ~/.ssl/app.key
+    json_files:
+      # Extract from JSON configuration
+      app_config:
+        file: ~/config/app.json
+        transforms:
+          db_host: "database.host"
+          db_port: "database.port"
+          feature_flags: "features"
+    yaml_files:
+      # Extract from YAML manifest
+      k8s_config:
+        file: ~/k8s/deployment.yaml
+        transforms:
+          image_tag: "spec.template.spec.containers.0.image"
+          replicas: "spec.replicas"
 ```
 
-Rules: merged into one secret; key conflicts error; processing order `data` → `env` → `files`; empty values are written.
+Rules: merged into one secret; key conflicts error; processing order `data` → `env` → `files` → `json_files` → `yaml_files`; empty values are written.
 
 ## Template integration
 
@@ -457,6 +565,96 @@ sets:
     files:
       private_key: ~/.keys/jwt-signing.key
       public_key: ~/.keys/jwt-signing.pub
+```
+
+### JSON/YAML configuration extraction
+
+```yaml
+base_path: secrets/config/{{ .Token.Meta.environment }}
+
+sets:
+  # Extract database configuration from app config file
+  - path: database/primary
+    json_files:
+      db_config:
+        file: ~/config/app.json
+        transforms:
+          host: "database.primary.host"
+          port: "database.primary.port"
+          name: "database.primary.database"
+          username: "database.primary.username"
+          password: "database.primary.password"
+          ssl_mode: "database.primary.ssl.mode"
+          max_connections: "database.primary.pool.max_connections"
+
+  # Extract service credentials from Google Cloud service account
+  - path: gcp/service-account
+    json_files:
+      gcp_credentials:
+        file: ~/credentials/gcp-service-account.json
+        transforms:
+          project_id: "project_id"
+          client_id: "client_id"
+          client_email: "client_email"
+          private_key_id: "private_key_id"
+          private_key: "private_key"
+
+  # Extract Kubernetes deployment configuration
+  - path: k8s/deployment
+    yaml_files:
+      app_deployment:
+        file: ~/k8s/app-deployment.yaml
+        transforms:
+          namespace: "metadata.namespace"
+          app_name: "metadata.labels.app"
+          image: "spec.template.spec.containers.0.image"
+          replicas: "spec.replicas"
+          service_account: "spec.template.spec.serviceAccountName"
+
+  # Extract Helm values for chart deployment
+  - path: helm/values
+    yaml_files:
+      chart_values:
+        file: ~/charts/myapp/values.yaml
+        transforms:
+          image_tag: "image.tag"
+          image_repository: "image.repository"
+          ingress_host: "ingress.hosts.0.host"
+          storage_class: "persistence.storageClass"
+          storage_size: "persistence.size"
+
+  # Extract monitoring configuration from complex JSON
+  - path: monitoring/config
+    json_files:
+      monitoring_setup:
+        file: ~/config/monitoring.json
+        transforms:
+          prometheus_url: "services.prometheus.external_url"
+          grafana_admin_password: "services.grafana.security.admin_password"
+          alertmanager_webhook: "services.alertmanager.route.receiver"
+          first_target: "scrape_configs.0.static_configs.0.targets.0"
+
+  # Combine multiple sources for complete application config
+  - path: app/complete
+    data:
+      environment: "{{ .Token.Meta.environment }}"
+      deployed_by: "{{ .Token.DisplayName }}"
+    env:
+      secret_key: APP_SECRET_KEY
+      session_secret: SESSION_SECRET
+    json_files:
+      app_config:
+        file: ~/config/app.json
+        transforms:
+          debug_mode: "debug"
+          log_level: "logging.level"
+          cache_ttl: "cache.default_ttl"
+    yaml_files:
+      k8s_config:
+        file: ~/k8s/configmap.yaml
+        transforms:
+          api_version: "data.API_VERSION"
+          feature_flags: "data.FEATURE_FLAGS"
 ```
 
 ## Operations

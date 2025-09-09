@@ -65,6 +65,39 @@ func (c *Client) PutSecrets(path string, data map[string]interface{}) error {
 	}
 }
 
+// DeleteSecret deletes a secret at the given path, handling KV v2 and v1
+func (c *Client) DeleteSecret(path string) error {
+	mountPath, secretPath := c.parsePath(path)
+	// Try KV v2 delete (metadata delete latest version)
+	if err := c.deleteKVv2Secret(mountPath, secretPath); err == nil {
+		return nil
+	}
+	// Fallback KV v1 delete
+	if err := c.deleteKVv1Secret(path); err == nil {
+		return nil
+	} else {
+		return err
+	}
+}
+
+func (c *Client) deleteKVv1Secret(path string) error {
+	_, err := c.client.Logical().Delete(path)
+	if err != nil {
+		return fmt.Errorf("failed to delete secret at path %s: %w", path, err)
+	}
+	return nil
+}
+
+func (c *Client) deleteKVv2Secret(mountPath, secretPath string) error {
+	// KV v2 delete latest version uses delete path
+	fullPath := fmt.Sprintf("%s/delete/%s", mountPath, secretPath)
+	_, err := c.client.Logical().Write(fullPath, map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to delete KV v2 secret at %s: %w", fullPath, err)
+	}
+	return nil
+}
+
 // getKVv1Secrets retrieves secrets from KV v1 engine
 func (c *Client) getKVv1Secrets(path string) (map[string]interface{}, error) {
 	secret, err := c.client.Logical().Read(path)

@@ -30,6 +30,7 @@ type BatchSettings struct {
 	Jobs            []string `glazed.parameter:"jobs"`
 	Sections        []string `glazed.parameter:"sections"`
 	ForceOverwrite  bool     `glazed.parameter:"force-overwrite"`
+	SkipUnreadable  bool     `glazed.parameter:"skip-unreadable"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
@@ -52,6 +53,7 @@ func NewBatchCommand() (*BatchCommand, error) {
 			parameters.NewParameterDefinition("jobs", parameters.ParameterTypeStringList, parameters.WithHelp("Only process jobs with these names; default all")),
 			parameters.NewParameterDefinition("sections", parameters.ParameterTypeStringList, parameters.WithHelp("Only process sections with these names; default all")),
 			parameters.NewParameterDefinition("force-overwrite", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite .envrc without prompting")),
+			parameters.NewParameterDefinition("skip-unreadable", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip sections that cannot be read; warn instead of failing")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -132,13 +134,14 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	}
 	proc := batch.Processor{Client: client}
 	return proc.Process(cfg, batch.ProcessorOptions{
-		BasePath:        s.BasePath,
-		OutputOverride:  s.OutputOverride,
-		FormatOverride:  s.Format,
-		ContinueOnError: s.ContinueOnError,
-		DryRun:          s.DryRun,
-		SortKeys:        s.SortKeys,
-		ForceOverwrite:  s.ForceOverwrite,
+		BasePath:               s.BasePath,
+		OutputOverride:         s.OutputOverride,
+		FormatOverride:         s.Format,
+		ContinueOnError:        s.ContinueOnError,
+		DryRun:                 s.DryRun,
+		SortKeys:               s.SortKeys,
+		ForceOverwrite:         s.ForceOverwrite,
+		SkipUnreadableSections: s.SkipUnreadable,
 	})
 }
 

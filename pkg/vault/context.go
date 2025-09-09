@@ -9,6 +9,8 @@ import (
 // TemplateContext used for rendering templated strings such as paths
 type TemplateContext struct {
 	Token TokenContext
+	Extra map[string]interface{}
+	Data  map[string]interface{}
 }
 
 type TokenContext struct {

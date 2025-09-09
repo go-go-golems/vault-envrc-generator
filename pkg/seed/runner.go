@@ -205,7 +205,9 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 							continue
 						}
 						if !commandAllRun {
-							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, renderedTarget, cmdStr)
+							escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\`, `\\`)
+							escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
+							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, escapedRenderedTarget, cmdStr)
 							dec := askForDecision(prompt)
 							switch dec {
 							case decYes:

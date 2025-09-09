@@ -5,6 +5,7 @@ go 1.24.5
 toolchain go1.24.6
 
 require (
+	github.com/go-go-golems/clay v0.1.47
 	github.com/go-go-golems/glazed v0.6.12
 	github.com/hashicorp/vault/api v1.20.0
 	github.com/rs/zerolog v1.34.0

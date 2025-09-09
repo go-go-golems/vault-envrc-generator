@@ -3,6 +3,7 @@ package batch
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -92,6 +93,8 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 		var stdoutJSONAgg map[string]interface{}
 		var stdoutYAMLAgg map[string]interface{}
 		var stdoutENVRCAgg strings.Builder
+		// aggregate envrc content per output path so we can overwrite once at the end
+		envrcFileBuffers := map[string]*strings.Builder{}
 
 		for _, sec := range job.Sections {
 			log.Debug().Str("section", sec.Name).Msg("section start")
@@ -287,10 +290,39 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 					stdoutENVRCAgg.WriteString(content)
 				}
 			} else {
-				if err := output.Write(renderedOutPath, []byte(content), output.WriteOptions{Format: format, SortKeys: opts.SortKeys}); err != nil {
-					return err
+				if format == "envrc" {
+					b, ok := envrcFileBuffers[renderedOutPath]
+					if !ok {
+						b = &strings.Builder{}
+						envrcFileBuffers[renderedOutPath] = b
+					}
+					b.WriteString(content)
+				} else {
+					if err := output.Write(renderedOutPath, []byte(content), output.WriteOptions{Format: format, SortKeys: opts.SortKeys}); err != nil {
+						return err
+					}
 				}
 			}
+		}
+
+		// flush aggregated envrc outputs (overwrite and warn)
+		for outPath, b := range envrcFileBuffers {
+			if b.Len() == 0 {
+				continue
+			}
+			// Ensure directory exists
+			if dir := filepath.Dir(outPath); dir != "" && dir != "." {
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return fmt.Errorf("failed to create output directory %s: %w", dir, err)
+				}
+			}
+			if fi, err := os.Stat(outPath); err == nil && fi.Mode().IsRegular() {
+				log.Warn().Str("path", outPath).Msg("overwriting existing .envrc file")
+			}
+			if err := os.WriteFile(outPath, []byte(b.String()), 0644); err != nil {
+				return fmt.Errorf("failed to write envrc output to %s: %w", outPath, err)
+			}
+			log.Debug().Str("output", outPath).Int("bytes", b.Len()).Msg("envrc file overwritten")
 		}
 
 		// flush outputs to stdout
@@ -432,12 +464,7 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 		options.Format = "envrc"
 	}
 
-	// For envrc, suppress header when appending to existing file
-	if options.Format == "envrc" && renderedOutput != "-" {
-		if fi, err := os.Stat(renderedOutput); err == nil && fi.Size() > 0 {
-			options.SuppressHeader = true
-		}
-	}
+	// For envrc, we now overwrite instead of appending; keep headers
 
 	generator := envrc.NewGenerator(options)
 	content, err := generator.Generate(secrets)
@@ -456,6 +483,21 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 	log.Debug().Str("output", renderedOutput).Msg("writing job output")
 	if opts.DryRun {
 		renderedOutput = "-"
+	}
+	if options.Format == "envrc" && renderedOutput != "-" {
+		// Ensure directory exists
+		if dir := filepath.Dir(renderedOutput); dir != "" && dir != "." {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return fmt.Errorf("failed to create output directory %s: %w", dir, err)
+			}
+		}
+		if fi, err := os.Stat(renderedOutput); err == nil && fi.Mode().IsRegular() {
+			log.Warn().Str("path", renderedOutput).Msg("overwriting existing .envrc file")
+		}
+		if err := os.WriteFile(renderedOutput, []byte(content), 0644); err != nil {
+			return fmt.Errorf("failed to write envrc output to %s: %w", renderedOutput, err)
+		}
+		return nil
 	}
 	return output.Write(renderedOutput, []byte(content), output.WriteOptions{Format: options.Format, SortKeys: opts.SortKeys})
 }

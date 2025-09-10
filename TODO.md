@@ -2,4 +2,6 @@
 - add metadata when seeding
 - show metadata in tree
 - show metadata when filling/overwriting
-- add 
+- allow ordering of fallbacks for filling
+- mark some setting as "initializing", so only to be executed if empty
+

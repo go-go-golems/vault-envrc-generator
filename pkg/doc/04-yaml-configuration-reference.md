@@ -95,6 +95,8 @@ jobs:
 | `exclude_keys` | array | | Keys to exclude from output |
 | `include_keys` | array | | Keys to include (overrides exclude) |
 | `template` | string | | Custom template file path |
+| `envrc_prefix` | string | | Raw text prepended to envrc outputs (before first section) |
+| `envrc_suffix` | string | | Raw text appended to envrc outputs (after all sections) |
 | `variables` | object | | Template variables for rendering |
 | `sections` | array | | Section definitions for multi-source processing |
 | `fixed` | object | | Static key-value pairs added to output |
@@ -135,6 +137,28 @@ sections:
 | `output` | string | | Section-specific output file |
 
 ### Advanced
+
+#### **envrc prefix/suffix**
+Inject raw shell lines before/after the generated `envrc` content. Useful for exports referencing other variables without hitting Vault, e.g. Terraform `TF_VAR_*`.
+
+```yaml
+jobs:
+  - name: development-environment
+    output: .envrc
+    format: envrc
+    envrc_prefix: |
+      # ---- envrc prologue ----
+      export TF_VAR_do_token=${DIGITALOCEAN_ACCESS_TOKEN}
+      export TF_VAR_spaces_access_key_id=${SPACES_ACCESS_KEY_ID}
+      export TF_VAR_spaces_secret_access_key=${SPACES_SECRET_ACCESS_KEY}
+    envrc_suffix: |
+      # ---- envrc epilogue ----
+      layout ruby
+```
+Notes:
+- Prefix/suffix are only applied when `format: envrc` (for jobs or sections resolved to envrc). They are ignored for `json`/`yaml` outputs.
+- When multiple sections write to the same envrc output, the prefix appears once at the top, suffix once at the end.
+- Prefix/suffix are rendered as Go templates with the same token context as paths (see Template System section).
 
 #### **Environment Mapping (`env_map`)**
 Direct mapping from Vault keys to environment variable names, bypassing prefix and transformation rules.

@@ -39,4 +39,6 @@ type Job struct {
 	Sections    []Section         `yaml:"sections,omitempty"`
 	BasePath    string            `yaml:"base_path,omitempty"`
 	Fixed       map[string]string `yaml:"fixed,omitempty"`
+	EnvrcPrefix string            `yaml:"envrc_prefix,omitempty"`
+	EnvrcSuffix string            `yaml:"envrc_suffix,omitempty"`
 }

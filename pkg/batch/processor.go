@@ -294,6 +294,7 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 						stdoutYAMLAgg[k] = v
 					}
 				default:
+					// For envrc stdout aggregation, we will assemble prefix and suffix once after the loop
 					stdoutENVRCAgg.WriteString(content)
 				}
 			} else {
@@ -317,6 +318,25 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			if b.Len() == 0 {
 				continue
 			}
+			// Prefix/Suffix wrapping for envrc (render as templates)
+			finalContent := b.String()
+			if strings.TrimSpace(job.EnvrcPrefix) != "" {
+				rp, err := vault.RenderTemplateString(job.EnvrcPrefix, tctx)
+				if err != nil {
+					return fmt.Errorf("failed to render envrc_prefix: %w", err)
+				}
+				finalContent = rp + "\n" + finalContent
+			}
+			if strings.TrimSpace(job.EnvrcSuffix) != "" {
+				rs, err := vault.RenderTemplateString(job.EnvrcSuffix, tctx)
+				if err != nil {
+					return fmt.Errorf("failed to render envrc_suffix: %w", err)
+				}
+				if !strings.HasSuffix(finalContent, "\n") {
+					finalContent += "\n"
+				}
+				finalContent = finalContent + rs + "\n"
+			}
 			// Ensure directory exists
 			if dir := filepath.Dir(outPath); dir != "" && dir != "." {
 				if err := os.MkdirAll(dir, 0755); err != nil {
@@ -335,10 +355,10 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 					}
 				}
 			}
-			if err := os.WriteFile(outPath, []byte(b.String()), 0644); err != nil {
+			if err := os.WriteFile(outPath, []byte(finalContent), 0644); err != nil {
 				return fmt.Errorf("failed to write envrc output to %s: %w", outPath, err)
 			}
-			log.Debug().Str("output", outPath).Int("bytes", b.Len()).Msg("envrc file overwritten")
+			log.Debug().Str("output", outPath).Int("bytes", len(finalContent)).Msg("envrc file overwritten")
 		}
 
 		// flush outputs to stdout
@@ -417,7 +437,25 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			}
 		}
 		if stdoutENVRCAgg.Len() > 0 {
-			fmt.Print(stdoutENVRCAgg.String())
+			finalStdout := stdoutENVRCAgg.String()
+			if strings.TrimSpace(job.EnvrcPrefix) != "" {
+				rp, err := vault.RenderTemplateString(job.EnvrcPrefix, tctx)
+				if err != nil {
+					return fmt.Errorf("failed to render envrc_prefix: %w", err)
+				}
+				finalStdout = rp + "\n" + finalStdout
+			}
+			if strings.TrimSpace(job.EnvrcSuffix) != "" {
+				rs, err := vault.RenderTemplateString(job.EnvrcSuffix, tctx)
+				if err != nil {
+					return fmt.Errorf("failed to render envrc_suffix: %w", err)
+				}
+				if !strings.HasSuffix(finalStdout, "\n") {
+					finalStdout += "\n"
+				}
+				finalStdout = finalStdout + rs + "\n"
+			}
+			fmt.Print(finalStdout)
 		}
 		return nil
 	}
@@ -497,7 +535,25 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			header += fmt.Sprintf("# Description: %s\n", job.Description)
 		}
 		header += "\n"
-		content = header + content + "\n"
+		finalContent := header + content + "\n"
+		if strings.TrimSpace(job.EnvrcPrefix) != "" {
+			rp, err := vault.RenderTemplateString(job.EnvrcPrefix, tctx)
+			if err != nil {
+				return fmt.Errorf("failed to render envrc_prefix: %w", err)
+			}
+			finalContent = rp + "\n" + finalContent
+		}
+		if strings.TrimSpace(job.EnvrcSuffix) != "" {
+			rs, err := vault.RenderTemplateString(job.EnvrcSuffix, tctx)
+			if err != nil {
+				return fmt.Errorf("failed to render envrc_suffix: %w", err)
+			}
+			if !strings.HasSuffix(finalContent, "\n") {
+				finalContent += "\n"
+			}
+			finalContent = finalContent + rs + "\n"
+		}
+		content = finalContent
 	}
 
 	log.Debug().Str("output", renderedOutput).Msg("writing job output")

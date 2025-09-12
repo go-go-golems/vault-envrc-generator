@@ -15,9 +15,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/batch"
+	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
-	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
 )
 
 type BatchCommand struct{ *gcmds.CommandDescription }
@@ -36,6 +36,7 @@ type BatchSettings struct {
 	SkipUnreadable  bool     `glazed.parameter:"skip-unreadable"`
 	AllowCmd        bool     `glazed.parameter:"allow-commands"`
 	Verbose         bool     `glazed.parameter:"verbose"`
+	NoColor         bool     `glazed.parameter:"no-color"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
@@ -61,6 +62,7 @@ func NewBatchCommand() (*BatchCommand, error) {
 			parameters.NewParameterDefinition("skip-unreadable", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip sections that cannot be read; warn instead of failing")),
 			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run fallback commands defined in sections without confirmation")),
 			parameters.NewParameterDefinition("verbose", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Print per-section summaries and variable names")),
+			parameters.NewParameterDefinition("no-color", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Disable colored console output")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -77,8 +79,8 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
 		return err
 	}
-	// Initialize console colors based on TTY (no explicit flag yet)
-	output.InitConsole(false)
+	// Initialize console colors based on TTY and --no-color flag
+	output.InitConsole(s.NoColor)
 	vs, err := vaultlayer.GetVaultSettings(parsed)
 	if err != nil {
 		return err

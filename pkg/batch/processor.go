@@ -12,7 +12,6 @@ import (
 
 	"encoding/json"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/envrc"
-	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
 	cmdout "github.com/go-go-golems/vault-envrc-generator/pkg/output"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/rs/zerolog/log"
@@ -155,8 +154,12 @@ func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.Template
 					if opts.SkipUnreadableSections && !job.Required && !sec.Required {
 						// keep going with fallbacks (fixed/commands)
 						var descParts []string
-						if strings.TrimSpace(job.Description) != "" { descParts = append(descParts, job.Description) }
-						if strings.TrimSpace(sec.Description) != "" { descParts = append(descParts, sec.Description) }
+						if strings.TrimSpace(job.Description) != "" {
+							descParts = append(descParts, job.Description)
+						}
+						if strings.TrimSpace(sec.Description) != "" {
+							descParts = append(descParts, sec.Description)
+						}
 						desc := strings.Join(descParts, " / ")
 						short := cmdout.ShortError(err)
 						if desc != "" {
@@ -166,8 +169,12 @@ func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.Template
 						}
 					} else {
 						var descParts []string
-						if strings.TrimSpace(job.Description) != "" { descParts = append(descParts, job.Description) }
-						if strings.TrimSpace(sec.Description) != "" { descParts = append(descParts, sec.Description) }
+						if strings.TrimSpace(job.Description) != "" {
+							descParts = append(descParts, job.Description)
+						}
+						if strings.TrimSpace(sec.Description) != "" {
+							descParts = append(descParts, sec.Description)
+						}
 						desc := strings.Join(descParts, " / ")
 						if desc != "" {
 							return fmt.Errorf("failed to retrieve secrets from path %s for job '%s' — %s: %w", renderedSourcePath, job.Name, desc, err)
@@ -363,7 +370,9 @@ func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.Template
 				fmt.Println(cmdout.EmittingCount(len(selected)))
 				if len(selected) > 0 {
 					var names []string
-					for k := range selected { names = append(names, k) }
+					for k := range selected {
+						names = append(names, k)
+					}
 					sort.Strings(names)
 					fmt.Print(cmdout.ListNames(names))
 				}
@@ -424,7 +433,7 @@ func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.Template
 					}
 					b.WriteString(content)
 				} else {
-					if err := output.Write(renderedOutPath, []byte(content), output.WriteOptions{Format: format, SortKeys: opts.SortKeys}); err != nil {
+					if err := cmdout.Write(renderedOutPath, []byte(content), cmdout.WriteOptions{Format: format, SortKeys: opts.SortKeys}); err != nil {
 						return err
 					}
 				}
@@ -702,7 +711,7 @@ func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.Template
 		}
 		return nil
 	}
-	return output.Write(renderedOutput, []byte(content), output.WriteOptions{Format: options.Format, SortKeys: opts.SortKeys})
+	return cmdout.Write(renderedOutput, []byte(content), cmdout.WriteOptions{Format: options.Format, SortKeys: opts.SortKeys})
 }
 
 // confirmOverwrite prompts the user to confirm overwriting an existing file.

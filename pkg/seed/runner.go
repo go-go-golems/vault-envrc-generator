@@ -21,6 +21,7 @@ type Options struct {
 	ForceOverwrite    bool
 	AllowCommands     bool
 	ExtraTemplateData map[string]interface{}
+	OnlyNew           bool
 }
 
 type userDecision int
@@ -327,8 +328,25 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			continue
 		}
 
+		// If only-new is enabled, drop keys already present at target path
+		if opts.OnlyNew {
+			existing, err := client.GetSecrets(renderedTarget)
+			if err != nil {
+				// ignore not-found; treat as empty
+				if !isNotFoundError(err) {
+					return fmt.Errorf("failed to check existing secrets at %s: %w", renderedTarget, err)
+				}
+			} else if len(existing) > 0 {
+				for key := range data {
+					if _, ok := existing[key]; ok {
+						delete(data, key)
+					}
+				}
+			}
+		}
+
 		// Handle overwrite confirmations when existing values are present
-		if !opts.ForceOverwrite {
+		if !opts.ForceOverwrite && !opts.OnlyNew {
 			existing, err := client.GetSecrets(renderedTarget)
 			if err != nil {
 				// if not found, skip prompting; otherwise propagate error

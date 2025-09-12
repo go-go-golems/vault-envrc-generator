@@ -29,6 +29,7 @@ type SeedSettings struct {
 	Sets      []string `glazed.parameter:"sets"`
 	Force     bool     `glazed.parameter:"force"`
 	AllowCmd  bool     `glazed.parameter:"allow-commands"`
+	OnlyNew   bool     `glazed.parameter:"only-new"`
 	ExtraKV   []string `glazed.parameter:"extra"`
 	ExtraFile string   `glazed.parameter:"extra-file"`
 }
@@ -49,6 +50,7 @@ func NewSeedCommand() (*SeedCommand, error) {
 			parameters.NewParameterDefinition("sets", parameters.ParameterTypeStringList, parameters.WithHelp("Only seed sets whose path matches any of these; default all")),
 			parameters.NewParameterDefinition("force", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite existing keys without prompting")),
 			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run commands in spec without confirmation")),
+			parameters.NewParameterDefinition("only-new", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Only write keys that don't already exist at the target path")),
 			parameters.NewParameterDefinition("extra", parameters.ParameterTypeStringList, parameters.WithHelp("Additional template data key=value pairs")),
 			parameters.NewParameterDefinition("extra-file", parameters.ParameterTypeString, parameters.WithHelp("YAML or JSON file with additional template data")),
 		),
@@ -160,7 +162,7 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 		}
 	}
 
-	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun, ForceOverwrite: s.Force, AllowCommands: s.AllowCmd, ExtraTemplateData: extra})
+	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun, ForceOverwrite: s.Force, AllowCommands: s.AllowCmd, ExtraTemplateData: extra, OnlyNew: s.OnlyNew})
 }
 
 var _ gcmds.BareCommand = &SeedCommand{}

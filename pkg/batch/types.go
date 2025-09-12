@@ -21,6 +21,7 @@ type Section struct {
 	Output      string            `yaml:"output,omitempty"`
 	EnvMap      map[string]string `yaml:"env_map,omitempty"`
 	Fixed       map[string]string `yaml:"fixed,omitempty"`
+	Commands    map[string]string `yaml:"commands,omitempty"`
 }
 
 // Job represents a single job in batch processing

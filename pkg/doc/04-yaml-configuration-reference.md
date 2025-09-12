@@ -116,6 +116,10 @@ sections:
       GOOGLE_CLIENT_SECRET: client_secret
     fixed:
       GOOGLE_PROVIDER: "oauth2"
+    # Optional: run shell commands to fill missing values
+    commands:
+      GOOGLE_CLIENT_ID: "jq -r .installed.client_id ~/credentials/google-oauth.json"
+      GOOGLE_CLIENT_SECRET: "jq -r .installed.client_secret ~/credentials/google-oauth.json"
 ```
 
 #### Section fields
@@ -131,12 +135,32 @@ sections:
 | `include_keys` | array | | Keys to include from this section |
 | `env_map` | object | | Direct environment variable mapping |
 | `fixed` | object | | Static values added to this section |
+| `commands` | object | | Shell commands to generate values when not present in Vault |
 | `template` | string | | Section-specific template file |
 | `variables` | object | | Template variables for section |
 | `format` | string | | Section-specific format override |
 | `output` | string | | Section-specific output file |
 
 ### Advanced
+#### **Fallback Commands (`commands`)**
+Run shell commands during batch processing to supply values when they are not present in Vault. Commands are rendered as Go templates with access to the same template context as paths. Use `--allow-commands` to run without prompts; otherwise you will be asked once per key (with options to allow/skip all).
+
+```yaml
+sections:
+  - name: identity-jwt
+    path: resources/identity/jwt-rs256
+    env_map:
+      IDENTITY_SERVICE_JWT_AUDIENCE: audience
+    commands:
+      IDENTITY_SERVICE_JWT_AUDIENCE: "echo mento-rails"
+```
+
+Notes:
+- With `env_map`, `commands` keys refer to the target environment variable names.
+- Without `env_map`, `commands` keys refer to source keys which are then subject to `prefix`, `transform_keys`, and filtering.
+- Dry run prints placeholders like `<command: ...>`.
+- Use responsibly; outputs are captured from stdout and trimmed.
+
 
 #### **envrc prefix/suffix**
 Inject raw shell lines before/after the generated `envrc` content. Useful for exports referencing other variables without hitting Vault, e.g. Terraform `TF_VAR_*`.

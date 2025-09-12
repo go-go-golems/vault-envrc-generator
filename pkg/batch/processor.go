@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -29,6 +30,7 @@ type ProcessorOptions struct {
 	SortKeys               bool
 	ForceOverwrite         bool
 	SkipUnreadableSections bool
+	AllowCommands          bool
 }
 
 func (p *Processor) Process(cfg *Config, opts ProcessorOptions) error {
@@ -99,6 +101,9 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 		// aggregate envrc content per output path so we can overwrite once at the end
 		envrcFileBuffers := map[string]*strings.Builder{}
 
+		// Track per-job decisions for command prompts
+		commandAllRun := false
+		commandAllSkip := false
 		for _, sec := range job.Sections {
 			log.Debug().Str("section", sec.Name).Msg("section start")
 			joinedPath := vault.JoinBaseAndPath(effectiveBase, sec.Path)
@@ -139,15 +144,17 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 				s, err := p.Client.GetSecrets(renderedSourcePath)
 				if err != nil {
 					if opts.SkipUnreadableSections {
-						fmt.Fprintf(os.Stderr, "Warning: skipping unreadable section '%s' (%s): %v\n", sec.Name, renderedSourcePath, err)
-						continue
+						// keep going with fallbacks (fixed/commands)
+						fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s), proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, err)
+					} else {
+						return fmt.Errorf("failed to retrieve secrets from path %s: %w", renderedSourcePath, err)
 					}
-					return fmt.Errorf("failed to retrieve secrets from path %s: %w", renderedSourcePath, err)
+				} else {
+					for k, v := range s {
+						secrets[k] = v
+					}
+					log.Debug().Int("keys", len(s)).Str("source", renderedSourcePath).Msg("fetched secrets")
 				}
-				for k, v := range s {
-					secrets[k] = v
-				}
-				log.Debug().Int("keys", len(s)).Str("source", renderedSourcePath).Msg("fetched secrets")
 			}
 
 			// fixed values
@@ -179,6 +186,69 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			if len(sec.Variables) > 0 {
 				for key, value := range sec.Variables {
 					secrets[key] = value
+				}
+			}
+
+			// Populate template data for command rendering
+			if tctx.Data == nil {
+				tctx.Data = map[string]interface{}{}
+			}
+			for dk, dv := range secrets {
+				tctx.Data[dk] = dv
+			}
+
+			// Execute fallback commands if provided
+			commandValues := map[string]string{}
+			if len(sec.Commands) > 0 {
+				keys := make([]string, 0, len(sec.Commands))
+				for k := range sec.Commands {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					cmdT := sec.Commands[k]
+					cmdStr, err := vault.RenderTemplateString(cmdT, tctx)
+					if err != nil {
+						return fmt.Errorf("section '%s': failed to render command for key '%s': %w", sec.Name, k, err)
+					}
+					if strings.TrimSpace(cmdStr) == "" {
+						continue
+					}
+					if opts.DryRun {
+						commandValues[k] = fmt.Sprintf("<command: %s>", cmdStr)
+						tctx.Data[k] = commandValues[k]
+						continue
+					}
+					if !opts.AllowCommands {
+						if commandAllSkip {
+							continue
+						}
+						if !commandAllRun {
+							prompt := fmt.Sprintf("Run command for key '%s' in job '%s' section '%s'? [y/N/a/s]: %s ", k, job.Name, sec.Name, cmdStr)
+							dec := askForDecision(prompt)
+							switch dec {
+							case decYes:
+								// proceed
+							case decAllYes:
+								commandAllRun = true
+							case decAllNo:
+								commandAllSkip = true
+								continue
+							case decNo:
+								continue
+							}
+						}
+					}
+					out, err := runShellCommand(cmdStr)
+					if err != nil {
+						return fmt.Errorf("section '%s': command for key '%s' failed: %w", sec.Name, k, err)
+					}
+					val := strings.TrimSpace(out)
+					if val == "" {
+						continue
+					}
+					commandValues[k] = val
+					tctx.Data[k] = val
 				}
 			}
 
@@ -219,11 +289,24 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 						log.Debug().Str("source", renderedSourcePath).Str("key", srcKey).Msg("missing key in env_map")
 					}
 				}
+				// Merge command-produced values as fallback (do not overwrite mapped keys)
+				for envName, v := range commandValues {
+					if _, ok := mapped[envName]; !ok {
+						mapped[envName] = v
+					}
+				}
 				selected = mapped
 				transform = false
 				prefix = ""
 				exclude = nil
 				include = nil
+			} else {
+				// No env_map: merge command values into secrets as source keys if missing
+				for k, v := range commandValues {
+					if _, ok := secrets[k]; !ok {
+						secrets[k] = v
+					}
+				}
 			}
 
 			suppressHeader := false
@@ -598,4 +681,40 @@ func confirmOverwrite(path string) (bool, error) {
 	}
 	line = strings.TrimSpace(strings.ToLower(line))
 	return line == "y" || line == "yes", nil
+}
+
+// decision model copied from seed runner to keep UX consistent
+type userDecision int
+
+const (
+	decNo userDecision = iota
+	decYes
+	decAllYes
+	decAllNo
+)
+
+func askForDecision(prompt string) userDecision {
+	fmt.Print(prompt)
+	reader := bufio.NewReader(os.Stdin)
+	line, _ := reader.ReadString('\n')
+	answer := strings.TrimSpace(strings.ToLower(line))
+	switch answer {
+	case "y", "yes":
+		return decYes
+	case "a", "all":
+		return decAllYes
+	case "s", "skip", "sa", "skipall", "skip-all":
+		return decAllNo
+	default:
+		return decNo
+	}
+}
+
+func runShellCommand(command string) (string, error) {
+	cmd := exec.Command("/bin/sh", "-c", command)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

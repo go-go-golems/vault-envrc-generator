@@ -31,6 +31,7 @@ type BatchSettings struct {
 	Sections        []string `glazed.parameter:"sections"`
 	ForceOverwrite  bool     `glazed.parameter:"force-overwrite"`
 	SkipUnreadable  bool     `glazed.parameter:"skip-unreadable"`
+	AllowCmd        bool     `glazed.parameter:"allow-commands"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
@@ -54,6 +55,7 @@ func NewBatchCommand() (*BatchCommand, error) {
 			parameters.NewParameterDefinition("sections", parameters.ParameterTypeStringList, parameters.WithHelp("Only process sections with these names; default all")),
 			parameters.NewParameterDefinition("force-overwrite", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite .envrc without prompting")),
 			parameters.NewParameterDefinition("skip-unreadable", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip sections that cannot be read; warn instead of failing")),
+			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run fallback commands defined in sections without confirmation")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -142,6 +144,7 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 		SortKeys:               s.SortKeys,
 		ForceOverwrite:         s.ForceOverwrite,
 		SkipUnreadableSections: s.SkipUnreadable,
+		AllowCommands:          s.AllowCmd,
 	})
 }
 

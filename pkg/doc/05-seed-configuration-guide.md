@@ -438,3 +438,9 @@ For practical examples and getting started, see:
 ```
 vault-envrc-generator help vault-envrc-getting-started
 ```
+
+See also the batch guide for runtime fallback commands in sections:
+
+```
+vault-envrc-generator help yaml-configuration-reference
+```

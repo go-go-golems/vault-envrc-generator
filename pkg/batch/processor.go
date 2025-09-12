@@ -2,6 +2,7 @@ package batch
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/envrc"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
+	cmdout "github.com/go-go-golems/vault-envrc-generator/pkg/output"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
@@ -31,9 +33,10 @@ type ProcessorOptions struct {
 	ForceOverwrite         bool
 	SkipUnreadableSections bool
 	AllowCommands          bool
+	Verbose                bool
 }
 
-func (p *Processor) Process(cfg *Config, opts ProcessorOptions) error {
+func (p *Processor) Process(ctx context.Context, cfg *Config, opts ProcessorOptions) error {
 	// build template context
 	tctx, err := vault.BuildTemplateContext(p.Client)
 	if err != nil {
@@ -51,15 +54,15 @@ func (p *Processor) Process(cfg *Config, opts ProcessorOptions) error {
 		}
 	}
 
-	return p.processSequential(cfg.Jobs, tctx, basePath, opts)
+	return p.processSequential(ctx, cfg.Jobs, tctx, basePath, opts)
 }
 
-func (p *Processor) processSequential(jobs []Job, tctx vault.TemplateContext, basePath string, opts ProcessorOptions) error {
+func (p *Processor) processSequential(ctx context.Context, jobs []Job, tctx vault.TemplateContext, basePath string, opts ProcessorOptions) error {
 	var errors []error
 	for i, job := range jobs {
 		fmt.Printf("[%d/%d] Processing job: %s\n", i+1, len(jobs), job.Name)
 		log.Debug().Int("sections", len(job.Sections)).Str("job", job.Name).Msg("batch job start")
-		if err := p.processJob(job, tctx, basePath, opts); err != nil {
+		if err := p.processJob(ctx, job, tctx, basePath, opts); err != nil {
 			fmt.Fprintf(os.Stderr, "Job '%s' failed: %v\n", job.Name, err)
 			errors = append(errors, err)
 			if !opts.ContinueOnError {
@@ -79,7 +82,7 @@ func (p *Processor) processSequential(jobs []Job, tctx vault.TemplateContext, ba
 
 // processParallel was removed to avoid lock contention; keep sequential processing only.
 
-func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath string, opts ProcessorOptions) error {
+func (p *Processor) processJob(ctx context.Context, job Job, tctx vault.TemplateContext, basePath string, opts ProcessorOptions) error {
 	log.Debug().Str("job", job.Name).Int("sections", len(job.Sections)).Msg("process job")
 	// job-level base path override
 	effectiveBase := basePath
@@ -105,7 +108,13 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 		commandAllRun := false
 		commandAllSkip := false
 		for _, sec := range job.Sections {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("interrupted")
+			default:
+			}
 			log.Debug().Str("section", sec.Name).Msg("section start")
+			fmt.Print(cmdout.SectionHeader(sec.Name, sec.Description))
 			joinedPath := vault.JoinBaseAndPath(effectiveBase, sec.Path)
 			renderedSourcePath, err := vault.RenderTemplateString(joinedPath, tctx)
 			if err != nil {
@@ -146,26 +155,19 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 					if opts.SkipUnreadableSections && !job.Required && !sec.Required {
 						// keep going with fallbacks (fixed/commands)
 						var descParts []string
-						if strings.TrimSpace(job.Description) != "" {
-							descParts = append(descParts, job.Description)
-						}
-						if strings.TrimSpace(sec.Description) != "" {
-							descParts = append(descParts, sec.Description)
-						}
+						if strings.TrimSpace(job.Description) != "" { descParts = append(descParts, job.Description) }
+						if strings.TrimSpace(sec.Description) != "" { descParts = append(descParts, sec.Description) }
 						desc := strings.Join(descParts, " / ")
+						short := cmdout.ShortError(err)
 						if desc != "" {
-							fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s) for job '%s' — %s; proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, job.Name, desc, err)
+							fmt.Println(cmdout.Warnf("unreadable section '%s' (%s) for job '%s' — %s; proceeding with fallbacks: %s", sec.Name, renderedSourcePath, job.Name, desc, short))
 						} else {
-							fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s) for job '%s'; proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, job.Name, err)
+							fmt.Println(cmdout.Warnf("unreadable section '%s' (%s) for job '%s'; proceeding with fallbacks: %s", sec.Name, renderedSourcePath, job.Name, short))
 						}
 					} else {
 						var descParts []string
-						if strings.TrimSpace(job.Description) != "" {
-							descParts = append(descParts, job.Description)
-						}
-						if strings.TrimSpace(sec.Description) != "" {
-							descParts = append(descParts, sec.Description)
-						}
+						if strings.TrimSpace(job.Description) != "" { descParts = append(descParts, job.Description) }
+						if strings.TrimSpace(sec.Description) != "" { descParts = append(descParts, sec.Description) }
 						desc := strings.Join(descParts, " / ")
 						if desc != "" {
 							return fmt.Errorf("failed to retrieve secrets from path %s for job '%s' — %s: %w", renderedSourcePath, job.Name, desc, err)
@@ -177,6 +179,7 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 						secrets[k] = v
 					}
 					log.Debug().Int("keys", len(s)).Str("source", renderedSourcePath).Msg("fetched secrets")
+					fmt.Println(cmdout.Notef("Fetched %d key(s) from %s", len(s), renderedSourcePath))
 				}
 			}
 
@@ -356,6 +359,15 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 				return fmt.Errorf("failed to generate content: %w", err)
 			}
 			log.Debug().Int("bytes", len(content)).Str("section", sec.Name).Msg("generated content")
+			if opts.Verbose {
+				fmt.Println(cmdout.EmittingCount(len(selected)))
+				if len(selected) > 0 {
+					var names []string
+					for k := range selected { names = append(names, k) }
+					sort.Strings(names)
+					fmt.Print(cmdout.ListNames(names))
+				}
+			}
 
 			if options.Format == "envrc" {
 				header := fmt.Sprintf("# === %s", job.Name)

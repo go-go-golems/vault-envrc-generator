@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
@@ -15,6 +17,7 @@ import (
 	"github.com/go-go-golems/vault-envrc-generator/pkg/batch"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
+	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
 )
 
 type BatchCommand struct{ *gcmds.CommandDescription }
@@ -32,6 +35,7 @@ type BatchSettings struct {
 	ForceOverwrite  bool     `glazed.parameter:"force-overwrite"`
 	SkipUnreadable  bool     `glazed.parameter:"skip-unreadable"`
 	AllowCmd        bool     `glazed.parameter:"allow-commands"`
+	Verbose         bool     `glazed.parameter:"verbose"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
@@ -56,6 +60,7 @@ func NewBatchCommand() (*BatchCommand, error) {
 			parameters.NewParameterDefinition("force-overwrite", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite .envrc without prompting")),
 			parameters.NewParameterDefinition("skip-unreadable", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip sections that cannot be read; warn instead of failing")),
 			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run fallback commands defined in sections without confirmation")),
+			parameters.NewParameterDefinition("verbose", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Print per-section summaries and variable names")),
 		),
 		gcmds.WithLayersList(layer),
 	)
@@ -72,6 +77,8 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
 		return err
 	}
+	// Initialize console colors based on TTY (no explicit flag yet)
+	output.InitConsole(false)
 	vs, err := vaultlayer.GetVaultSettings(parsed)
 	if err != nil {
 		return err
@@ -134,8 +141,12 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 			}
 		}
 	}
+	// Signal-aware context
+	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	proc := batch.Processor{Client: client}
-	return proc.Process(cfg, batch.ProcessorOptions{
+	return proc.Process(sigCtx, cfg, batch.ProcessorOptions{
 		BasePath:               s.BasePath,
 		OutputOverride:         s.OutputOverride,
 		FormatOverride:         s.Format,
@@ -145,6 +156,7 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 		ForceOverwrite:         s.ForceOverwrite,
 		SkipUnreadableSections: s.SkipUnreadable,
 		AllowCommands:          s.AllowCmd,
+		Verbose:                s.Verbose,
 	})
 }
 

@@ -85,7 +85,8 @@ jobs:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | ✓ | Unique job identifier |
-| `description` | string | | Human-readable job description |
+| `description` | string | ✓ | Human-readable job description (shown in warnings/errors) |
+| `required` | boolean | | If true, fail the batch when the job cannot read its sections |
 | `output` | string | ✓ | Output file path (relative to working directory) |
 | `format` | string | | Output format: `envrc`, `json`, `yaml` (default: `envrc`) |
 | `base_path` | string | | Job-specific base path (overrides global) |
@@ -136,6 +137,7 @@ sections:
 | `env_map` | object | | Direct environment variable mapping |
 | `fixed` | object | | Static values added to this section |
 | `commands` | object | | Shell commands to generate values when not present in Vault |
+| `required` | boolean | | If true, fail the job when this section can't be read |
 | `template` | string | | Section-specific template file |
 | `variables` | object | | Template variables for section |
 | `format` | string | | Section-specific format override |

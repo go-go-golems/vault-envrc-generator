@@ -10,6 +10,7 @@ type Config struct {
 type Section struct {
 	Name        string            `yaml:"name,omitempty"`
 	Description string            `yaml:"description,omitempty"`
+	Required    bool              `yaml:"required,omitempty"`
 	Path        string            `yaml:"path,omitempty"`
 	Prefix      string            `yaml:"prefix,omitempty"`
 	ExcludeKeys []string          `yaml:"exclude_keys,omitempty"`
@@ -27,7 +28,8 @@ type Section struct {
 // Job represents a single job in batch processing
 type Job struct {
 	Name        string            `yaml:"name"`
-	Description string            `yaml:"description,omitempty"`
+	Description string            `yaml:"description"`
+	Required    bool              `yaml:"required"`
 	Path        string            `yaml:"path,omitempty"`
 	Output      string            `yaml:"output"`
 	Prefix      string            `yaml:"prefix,omitempty"`

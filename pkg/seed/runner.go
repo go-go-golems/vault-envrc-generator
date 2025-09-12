@@ -208,7 +208,7 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 						if !commandAllRun {
 							escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\`, `\\`)
 							escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
-							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, escapedRenderedTarget, cmdStr)
+							prompt := fmt.Sprintf("Run setup command '%s' at '%s'?: %s [y/N/a/s] ", k, escapedRenderedTarget, cmdStr)
 							dec := askForDecision(prompt)
 							switch dec {
 							case decYes:
@@ -275,7 +275,7 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 						continue
 					}
 					if !commandAllRun {
-						prompt := fmt.Sprintf("Run command for key '%s' at path '%s'? [y/N/a/s]: %s ", k, renderedTarget, cmdStr)
+						prompt := fmt.Sprintf("Run command for key '%s' at path '%s'?: %s [y/N/a/s] ", k, renderedTarget, cmdStr)
 						dec := askForDecision(prompt)
 						switch dec {
 						case decYes:
@@ -410,7 +410,7 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 						continue
 					}
 					if !commandAllRun {
-						prompt := fmt.Sprintf("Run cleanup at '%s'? [y/N/a/s]: %s ", renderedTarget, cmdStr)
+						prompt := fmt.Sprintf("Run cleanup at '%s'?: %s [y/N/a/s] ", renderedTarget, cmdStr)
 						dec := askForDecision(prompt)
 						switch dec {
 						case decYes:

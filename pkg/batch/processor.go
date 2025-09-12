@@ -143,10 +143,33 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 			if strings.TrimSpace(renderedSourcePath) != "" {
 				s, err := p.Client.GetSecrets(renderedSourcePath)
 				if err != nil {
-					if opts.SkipUnreadableSections {
+					if opts.SkipUnreadableSections && !job.Required && !sec.Required {
 						// keep going with fallbacks (fixed/commands)
-						fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s), proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, err)
+						var descParts []string
+						if strings.TrimSpace(job.Description) != "" {
+							descParts = append(descParts, job.Description)
+						}
+						if strings.TrimSpace(sec.Description) != "" {
+							descParts = append(descParts, sec.Description)
+						}
+						desc := strings.Join(descParts, " / ")
+						if desc != "" {
+							fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s) for job '%s' — %s; proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, job.Name, desc, err)
+						} else {
+							fmt.Fprintf(os.Stderr, "Warning: unreadable section '%s' (%s) for job '%s'; proceeding with fallbacks: %v\n", sec.Name, renderedSourcePath, job.Name, err)
+						}
 					} else {
+						var descParts []string
+						if strings.TrimSpace(job.Description) != "" {
+							descParts = append(descParts, job.Description)
+						}
+						if strings.TrimSpace(sec.Description) != "" {
+							descParts = append(descParts, sec.Description)
+						}
+						desc := strings.Join(descParts, " / ")
+						if desc != "" {
+							return fmt.Errorf("failed to retrieve secrets from path %s for job '%s' — %s: %w", renderedSourcePath, job.Name, desc, err)
+						}
 						return fmt.Errorf("failed to retrieve secrets from path %s: %w", renderedSourcePath, err)
 					}
 				} else {
@@ -224,7 +247,7 @@ func (p *Processor) processJob(job Job, tctx vault.TemplateContext, basePath str
 							continue
 						}
 						if !commandAllRun {
-							prompt := fmt.Sprintf("Run command for key '%s' in job '%s' section '%s'? [y/N/a/s]: %s ", k, job.Name, sec.Name, cmdStr)
+							prompt := fmt.Sprintf("Run command for key '%s' in job '%s' section '%s'?: %s [y/N/a/s] ", k, job.Name, sec.Name, cmdStr)
 							dec := askForDecision(prompt)
 							switch dec {
 							case decYes:

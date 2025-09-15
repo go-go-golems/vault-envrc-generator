@@ -1,7 +1,0 @@
-title: ":closed_lock_with_key: Prevent logging sensitive vault values"
-description: |
-  - stop printing the vault-populated API key in the example
-  - replace the clear-text output with status messages that avoid exposing secrets
-tests:
-  - command: go test ./...
-    result: pass

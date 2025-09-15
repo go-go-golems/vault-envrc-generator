@@ -16,14 +16,6 @@ type Suggestion struct {
 	CandidateVaultKey  string `json:"candidate_vault_key,omitempty" yaml:"candidate_vault_key,omitempty"`
 }
 
-type suggestionCandidate struct {
-	Reason    string
-	SetName   string
-	VaultPath string
-	VaultKey  string
-	Prefix    string
-}
-
 type prefixRule struct {
 	Prefix string
 	Reason string

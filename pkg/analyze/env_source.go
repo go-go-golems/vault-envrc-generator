@@ -138,7 +138,7 @@ func captureFromDirenv(ctx context.Context, opts Options) (map[string]string, er
 	return data, nil
 }
 
-func splitNull(data []byte, atEOF bool) (advance int, token []byte, err error) {
+func splitNull(data []byte, atEOF bool) (int, []byte, error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
 	}

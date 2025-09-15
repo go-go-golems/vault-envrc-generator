@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/batch"
+	"github.com/go-go-golems/vault-envrc-generator/pkg/cmdutil"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
 )
@@ -91,45 +92,13 @@ func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 		return err
 	}
 	// Apply job/section filtering if requested (ignore empty selectors)
-	if len(s.Jobs) > 0 {
-		allowedJobs := map[string]struct{}{}
-		for _, name := range s.Jobs {
-			if name == "" {
-				continue
-			}
-			allowedJobs[name] = struct{}{}
-		}
-		if len(allowedJobs) > 0 {
-			filteredJobs := make([]batch.Job, 0, len(cfg.Jobs))
-			for _, job := range cfg.Jobs {
-				if _, ok := allowedJobs[job.Name]; ok {
-					filteredJobs = append(filteredJobs, job)
-				}
-			}
-			cfg.Jobs = filteredJobs
-		}
-	}
+	cfg.Jobs = cmdutil.FilterItems(cfg.Jobs, s.Jobs, func(job batch.Job) string { return job.Name })
 	if len(s.Sections) > 0 {
-		allowedSecs := map[string]struct{}{}
-		for _, name := range s.Sections {
-			if name == "" {
+		for ji, job := range cfg.Jobs {
+			if len(job.Sections) == 0 {
 				continue
 			}
-			allowedSecs[name] = struct{}{}
-		}
-		if len(allowedSecs) > 0 {
-			for ji, job := range cfg.Jobs {
-				if len(job.Sections) == 0 {
-					continue
-				}
-				newSecs := make([]batch.Section, 0, len(job.Sections))
-				for _, sec := range job.Sections {
-					if _, ok := allowedSecs[sec.Name]; ok {
-						newSecs = append(newSecs, sec)
-					}
-				}
-				cfg.Jobs[ji].Sections = newSecs
-			}
+			cfg.Jobs[ji].Sections = cmdutil.FilterItems(job.Sections, s.Sections, func(sec batch.Section) string { return sec.Name }, func(sec batch.Section) string { return sec.Path })
 		}
 	}
 	proc := batch.Processor{Client: client}

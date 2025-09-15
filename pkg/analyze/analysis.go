@@ -267,11 +267,18 @@ func extractMappings(spec *seed.Spec) (map[string]mappingEntry, []NonEnvSeedInpu
 			collectNonEnv("commands", keys)
 		}
 		if len(set.SetupCommands) > 0 {
-			keys := make([]string, 0, len(set.SetupCommands))
-			for k := range set.SetupCommands {
-				keys = append(keys, k)
+			labels := make([]string, 0, len(set.SetupCommands))
+			for idx, sc := range set.SetupCommands {
+				label := strings.TrimSpace(sc.Name)
+				if label == "" {
+					label = strings.TrimSpace(sc.OutputKey)
+				}
+				if label == "" {
+					label = fmt.Sprintf("setup[%d]", idx+1)
+				}
+				labels = append(labels, label)
 			}
-			collectNonEnv("setup_commands", keys)
+			collectNonEnv("setup_commands", labels)
 		}
 		if len(set.JsonFiles) > 0 {
 			keys := make([]string, 0, len(set.JsonFiles))

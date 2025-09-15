@@ -132,6 +132,14 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if ac, err := appcmds.NewAnalyzeEnvCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(ac, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	if rtc, err := appcmds.NewRmTreeCommand(); err == nil {
 		cmd, err := cli.BuildCobraCommand(rtc, opts...)
 		cobra.CheckErr(err)

@@ -73,7 +73,11 @@ func main() {
 	if err := parsed.InitializeStruct(glayers.DefaultSlug, &s); err != nil {
 		panic(err)
 	}
-	fmt.Printf("api-key: %s\n", s.ApiKey)
+	if s.ApiKey != "" {
+		fmt.Println("api-key retrieved successfully")
+	} else {
+		fmt.Println("api-key not set")
+	}
 
 	// Prevent unused imports if running as a simple example
 	_ = context.Background()

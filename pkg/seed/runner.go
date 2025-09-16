@@ -164,85 +164,100 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			tctx.Data[dk] = dv
 		}
 
-		// Run setup_commands: populate tctx.Data but do not persist into data map
+		// Run setup_commands sequentially: populate tctx.Data but do not persist into data map
 		if len(set.SetupCommands) > 0 {
-			executed := map[string]bool{}
-			keys := make([]string, 0, len(set.SetupCommands))
-			for k := range set.SetupCommands {
-				keys = append(keys, k)
-			}
-			// Attempt multiple passes to satisfy dependencies
-			for pass := 0; pass < len(keys); pass++ {
-				progress := false
-				for _, k := range keys {
-					if executed[k] {
-						continue
+			for idx, sc := range set.SetupCommands {
+				name := strings.TrimSpace(sc.Name)
+				outputKey := strings.TrimSpace(sc.OutputKey)
+				shouldStoreOutput := storeSetupCommandOutput(outputKey)
+				if name == "" {
+					if shouldStoreOutput {
+						name = outputKey
+					} else {
+						name = fmt.Sprintf("setup[%d]", idx+1)
 					}
-					command := set.SetupCommands[k]
-					cmdStr, err := vault.RenderTemplateString(command, tctx)
-					if err != nil {
-						// Defer if missing .Data dependency
-						if isMissingDataKeyError(err) {
-							continue
+				}
+				cmdTemplate := sc.Command
+				if strings.TrimSpace(cmdTemplate) == "" {
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				cmdStr, err := vault.RenderTemplateString(cmdTemplate, tctx)
+				if err != nil {
+					if opts.DryRun && isMissingDataKeyError(err) {
+						logger := log.Debug().Str("name", name).Str("path", renderedTarget)
+						if sc.Description != "" {
+							logger = logger.Str("description", sc.Description)
 						}
-						return fmt.Errorf("set %d: failed to render setup command '%s': %w", i+1, k, err)
-					}
-					if strings.TrimSpace(cmdStr) == "" {
-						executed[k] = true
-						progress = true
-						continue
-					}
-					if opts.DryRun {
-						log.Debug().Str("key", k).Str("path", renderedTarget).Msg("seed: dry-run setup command")
-						executed[k] = true
-						progress = true
-						continue
-					}
-					if !opts.AllowCommands {
-						if commandAllSkip {
-							executed[k] = true
-							progress = true
-							continue
+						logger.Msg("seed: dry-run skipped setup command (missing data)")
+						if shouldStoreOutput {
+							tctx.Data[outputKey] = ""
 						}
-						if !commandAllRun {
-							escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\`, `\\`)
-							escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
-							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, escapedRenderedTarget, cmdStr)
-							dec := askForDecision(prompt)
-							switch dec {
-							case decYes:
-								// proceed
-							case decAllYes:
-								commandAllRun = true
-							case decAllNo:
-								commandAllSkip = true
-								fallthrough
-							case decNo:
-								executed[k] = true
-								progress = true
-								continue
+						continue
+					}
+					return fmt.Errorf("set %d: failed to render setup command '%s': %w", i+1, name, err)
+				}
+				if strings.TrimSpace(cmdStr) == "" {
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				if opts.DryRun {
+					logger := log.Debug().Str("name", name).Str("path", renderedTarget)
+					if sc.Description != "" {
+						logger = logger.Str("description", sc.Description)
+					}
+					logger.Msg("seed: dry-run setup command")
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				if !opts.AllowCommands {
+					if commandAllSkip {
+						if shouldStoreOutput {
+							tctx.Data[outputKey] = ""
+						}
+						continue
+					}
+					if !commandAllRun {
+						escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\\`, `\\\\`)
+						escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
+						promptParts := []string{fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", name, escapedRenderedTarget, cmdStr)}
+						if sc.Description != "" {
+							promptParts = append(promptParts, fmt.Sprintf("# %s", sc.Description))
+						}
+						prompt := strings.Join(promptParts, " ")
+						dec := askForDecision(prompt)
+						switch dec {
+						case decYes:
+							// proceed
+						case decAllYes:
+							commandAllRun = true
+						case decAllNo:
+							commandAllSkip = true
+							if shouldStoreOutput {
+								tctx.Data[outputKey] = ""
 							}
+							continue
+						case decNo:
+							if shouldStoreOutput {
+								tctx.Data[outputKey] = ""
+							}
+							continue
 						}
 					}
-					out, err := runShellCommand(cmdStr)
-					if err != nil {
-						return fmt.Errorf("set %d: setup command '%s' failed: %w", i+1, k, err)
-					}
-					val := strings.TrimSpace(out)
-					if val != "" {
-						tctx.Data[k] = val
-					}
-					executed[k] = true
-					progress = true
 				}
-				if !progress {
-					break
+				out, err := runShellCommand(cmdStr)
+				if err != nil {
+					return fmt.Errorf("set %d: setup command '%s' failed: %w", i+1, name, err)
 				}
-			}
-			// Verify all executed
-			for _, k := range keys {
-				if !executed[k] {
-					return fmt.Errorf("set %d: unsatisfied setup command dependencies; could not render '%s'", i+1, k)
+				val := strings.TrimSpace(out)
+				if shouldStoreOutput {
+					tctx.Data[outputKey] = val
 				}
 			}
 		}
@@ -259,6 +274,10 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 				command := set.Commands[k]
 				cmdStr, err := vault.RenderTemplateString(command, tctx)
 				if err != nil {
+					if opts.DryRun && isMissingDataKeyError(err) {
+						data[k] = fmt.Sprintf("<command: %s>", command)
+						continue
+					}
 					return fmt.Errorf("set %d: failed to render command for key '%s': %w", i+1, k, err)
 				}
 				if strings.TrimSpace(cmdStr) == "" {
@@ -415,6 +434,19 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 	}
 	log.Info().Msg("seed: completed")
 	return nil
+}
+
+func storeSetupCommandOutput(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	switch strings.ToLower(key) {
+	case "_ignored", "_ignore", "_", "-":
+		return false
+	default:
+		return true
+	}
 }
 
 func keysOf(m map[string]interface{}) []string {

@@ -111,11 +111,47 @@ sets:
 | `json_files` | object | | JSON file with transforms (vault_key: {file, transforms}) |
 | `yaml_files` | object | | YAML file with transforms (vault_key: {file, transforms}) |
 | `commands` | object | | Shell commands to run (vault_key: command string). Output becomes the value |
+| `setup_commands` | array | | Ordered preparation steps executed before commands/data writes (see below) |
 
 Notes:
 - `commands` entries are rendered as Go templates before execution (have access to `.Token` and `.Extra`).
 - By default, each command prompts for confirmation before running. Use `--allow-commands` to skip prompts.
 - Command outputs are trimmed and stored as string values.
+
+### Setup commands (`setup_commands`)
+
+Use `setup_commands` to declare an ordered list of shell steps that must run before the set's `commands` or data are evaluated. Each item is an object with:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` |  | Identifier shown in logs and prompts. Derived from `output_key` or position when omitted. |
+| `description` |  | Optional human-friendly description that appears in debug logs and prompts. |
+| `command` | ✓ | Shell snippet (Go template) that is executed sequentially. Empty strings are skipped. |
+| `output_key` |  | When set, the trimmed command output is stored in `.Data[output_key]` for later templates. Use `_ignored`, `_ignore`, `_`, or `-` to discard output. |
+
+Example:
+
+```yaml
+setup_commands:
+  - name: create-temp-private-path
+    description: Allocate scratch file for RSA key generation
+    command: "{{ if not .Extra.skip_generate }}/bin/mktemp{{ end }}"
+    output_key: _tmp_private
+  - name: generate-rsa-keypair
+    description: Generate RSA private key for identity service
+    command: |
+      {{ if and (not .Extra.skip_generate) .Data._tmp_private }}openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out {{ .Data._tmp_private }}{{ end }}
+    output_key: _ignored
+```
+
+Behavior highlights:
+
+- Commands run strictly in the order declared; no automatic dependency inference is required.
+- During `--dry-run`, commands are not executed but their names/descriptions are logged and any `output_key` is initialised to an empty string so later templates can still render.
+- With `--allow-commands` the steps execute without prompting; otherwise each step prompts once (with “all” / “skip all” options).
+- Use `cleanup_commands` to tear down temporary artifacts (for example, `rm` the file created with `mktemp`).
+
+The outputs captured through `output_key` become accessible through `.Data` for follow-up commands, making it simple to express dependency chains such as creating a temporary file, writing to it, then reading it back.
 
 ### Path resolution
 

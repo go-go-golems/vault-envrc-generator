@@ -12,10 +12,17 @@ type Set struct {
 	Env             map[string]string            `yaml:"env"`
 	Files           map[string]string            `yaml:"files"`
 	Commands        map[string]string            `yaml:"commands"`
-	SetupCommands   map[string]string            `yaml:"setup_commands"`
+	SetupCommands   []SetupCommand               `yaml:"setup_commands"`
 	CleanupCommands []string                     `yaml:"cleanup_commands"`
 	JsonFiles       map[string]JsonFileTransform `yaml:"json_files"`
 	YamlFiles       map[string]YamlFileTransform `yaml:"yaml_files"`
+}
+
+type SetupCommand struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	Command     string `yaml:"command"`
+	OutputKey   string `yaml:"output_key,omitempty"`
 }
 
 // JsonFileTransform defines how to extract and transform data from JSON files

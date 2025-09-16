@@ -239,6 +239,26 @@ See the dedicated guide for the `seed` YAML format:
 vault-envrc-generator help seed-configuration-guide
 ```
 
+### Ordered setup commands
+
+`setup_commands` in seed specs are now expressed as an ordered list of objects, each containing `name`, `description`, `command`, and an optional `output_key`. Commands are rendered as Go templates and executed sequentially, eliminating the need for ad-hoc dependency resolution. Outputs are stored in `.Data[output_key]` for later templates unless you use `_ignored` (or `_ignore`, `_`, `-`) to discard them. During `--dry-run` the CLI logs each step and initialises referenced `output_key` entries to empty strings so dependent templates continue to render without errors.
+
+Example excerpt:
+
+```yaml
+setup_commands:
+  - name: fetch-temp-dir
+    command: "mktemp -d"
+    output_key: tmp_dir
+  - name: write-placeholder
+    description: populate a file for subsequent commands
+    command: |
+      {{ if .Data.tmp_dir }}echo example > {{ .Data.tmp_dir }}/seed.txt{{ end }}
+    output_key: _ignored
+```
+
+See the Seed Configuration Guide for a full walk-through, including how `cleanup_commands` pairs with these steps to remove temporary artifacts.
+
 ## Template System
 
 Both batch and seed configurations support Go template syntax for dynamic path and value generation.

@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/go-go-golems/vault-envrc-generator/pkg/cmdutil"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/seed"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
@@ -101,30 +102,7 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 	}
 
 	// Filter sets if requested (match by name or path) and ignoring empty selectors
-	if len(s.Sets) > 0 {
-		allowed := map[string]struct{}{}
-		for _, p := range s.Sets {
-			if p == "" {
-				continue
-			}
-			allowed[p] = struct{}{}
-		}
-		if len(allowed) > 0 {
-			filtered := make([]seed.Set, 0, len(spec.Sets))
-			for _, st := range spec.Sets {
-				if _, ok := allowed[st.Path]; ok {
-					filtered = append(filtered, st)
-					continue
-				}
-				if st.Name != "" {
-					if _, ok := allowed[st.Name]; ok {
-						filtered = append(filtered, st)
-					}
-				}
-			}
-			spec.Sets = filtered
-		}
-	}
+	spec.Sets = cmdutil.FilterItems(spec.Sets, s.Sets, func(st seed.Set) string { return st.Path }, func(st seed.Set) string { return st.Name })
 
 	// Build extra template data from flags
 	extra := map[string]interface{}{}

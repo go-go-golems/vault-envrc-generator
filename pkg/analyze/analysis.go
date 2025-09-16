@@ -79,9 +79,8 @@ type MappedMissingEntry struct {
 
 // UnmappedPresentEntry tracks environment variables that are not covered by the seed configuration.
 type UnmappedPresentEntry struct {
-	EnvVar      string       `json:"env_var" yaml:"env_var"`
-	Value       string       `json:"value" yaml:"value"`
-	Suggestions []Suggestion `json:"suggestions" yaml:"suggestions"`
+	EnvVar string `json:"env_var" yaml:"env_var"`
+	Value  string `json:"value" yaml:"value"`
 }
 
 // NonEnvSeedInput documents configuration sections that are not sourced from the environment.
@@ -146,11 +145,9 @@ func Analyze(ctx context.Context, opts Options) (*Result, map[string]string, err
 		if shouldIgnoreUnmapped(envVar) {
 			continue
 		}
-		suggestions := suggestForEnvVar(envVar, spec, mappings)
 		unmappedPresent = append(unmappedPresent, UnmappedPresentEntry{
-			EnvVar:      envVar,
-			Value:       value,
-			Suggestions: suggestions,
+			EnvVar: envVar,
+			Value:  value,
 		})
 	}
 
@@ -403,7 +400,6 @@ func CloneWithMask(result *Result, includeValues bool, censor string) *Result {
 		} else {
 			clone.Details.UnmappedPresent[i].Value = ""
 		}
-		clone.Details.UnmappedPresent[i].Suggestions = append([]Suggestion(nil), entry.Suggestions...)
 	}
 
 	clone.NonEnvSeedInputs = append([]NonEnvSeedInput(nil), result.NonEnvSeedInputs...)

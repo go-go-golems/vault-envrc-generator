@@ -53,7 +53,7 @@ The analyzer produces a summary row plus detailed categories that match the YAML
 
 - **Mapped Present**: Variables that are available in the chosen environment and mapped in the seed file. The report shows the target set, Vault path, and key.
 - **Mapped Missing**: Seed mappings that could not be resolved from the environment. These must be set locally before running `seed`.
-- **Unmapped Present**: Variables found in the environment but absent from the seed configuration. Suggestions point to likely Vault paths based on known prefixes, aliases, or existing set names.
+- **Unmapped Present**: Variables found in the environment but absent from the seed configuration so you can decide whether to add new mappings.
 - **Non-Env Seed Inputs**: Keys that originate from `data`, `files`, or `commands` in the seed file. They are included for context only.
 
 ## Formatting and Output Options

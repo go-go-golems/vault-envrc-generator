@@ -67,8 +67,6 @@ func EmitRows(ctx context.Context, result *Result, includeValues bool, censor st
 			types.MRP("category", "unmapped_present"),
 			types.MRP("env_var", entry.EnvVar),
 			types.MRP("value", maskValue(entry.Value)),
-			types.MRP("suggestions", entry.Suggestions),
-			types.MRP("suggestions_summary", summarizeSuggestions(entry.Suggestions)),
 		)
 		if err := processor.AddRow(ctx, row); err != nil {
 			return err

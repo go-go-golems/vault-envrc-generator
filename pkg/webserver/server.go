@@ -63,6 +63,13 @@ func (s *Server) setupRoutes() {
 	// Vault endpoints (Stage 1)
 	s.mux.HandleFunc("/api/v1/vault/list/", s.handleVaultList)
 	s.mux.HandleFunc("/api/v1/vault/tree", s.handleVaultTree)
+	s.mux.HandleFunc("/api/v1/vault/secrets/", s.handleVaultSecrets)
+	s.mux.HandleFunc("/api/v1/vault/status", s.handleVaultStatus)
+
+	// Generation endpoints
+	s.mux.HandleFunc("/api/v1/generate/", s.handleGenerate)
+	// Batch processing (stub for now)
+	s.mux.HandleFunc("/api/v1/batch/process", s.handleBatchProcess)
 
 	// Static files with SPA fallback
 	fileServer := http.FileServer(http.FS(s.assets))

@@ -96,7 +96,7 @@ Next
 What worked
 - Simple recursive component is enough to validate API wiring.
 
-What didn’t
+What didn't
 - None.
 
 What I learned / notes
@@ -104,6 +104,60 @@ What I learned / notes
 
 Next
 - Add `SecretViewer` to fetch/display leaf data; refine tree expand/collapse.
+
+---
+
+## Stage 5 — Bootstrap styling and Redux state management
+- Added Bootstrap CSS via CDN and converted all inline styles to Bootstrap classes.
+- Implemented Redux store with `vaultSlice` to manage:
+  - Expanded tree nodes (persistent across refreshes)
+  - Path, depth, includeValues, reveal settings
+  - Loading and error states
+- Wired tree expand/collapse to Redux store so refreshing preserves open folders.
+- Added `GET /api/v1/vault/secrets/{path}` endpoint for direct leaf secret retrieval.
+
+What worked
+- Bootstrap makes the UI look professional with minimal effort.
+- Redux state persistence solves the refresh-closes-tree problem perfectly.
+- Tree node paths as keys work well for tracking expansion state.
+
+What didn't
+- None.
+
+What I learned / notes
+- Redux with RTK is straightforward for simple state like UI preferences.
+- Bootstrap grid system handles responsive form layouts cleanly.
+
+Next
+- Implement single-path generation (envrc/json/yaml) endpoints and UI.
+
+---
+
+## Stage 6 — Bug fixes and UI improvements
+- **Fixed Redux Set mutation error**: Changed `expandedNodes` from `Set<string>` to `string[]` to avoid Immer mutation issues.
+- **Enabled sourcemaps**: Added `sourcemap: true` to Vite config for better debugging.
+- **Fixed tree depth browsing**: Set default depth to 0 (unlimited) so users can browse deeper than 3 levels.
+- **Improved secret display**: Made secret nodes clickable to fetch and display values on-demand.
+- **Added token information**: New `/api/v1/vault/status` endpoint and header display showing current user (root) and policies.
+- **Enhanced UX**: Loading spinners, close buttons for secrets, better visual hierarchy.
+
+What worked
+- Switching from Set to Array resolved the Immer mutation error completely.
+- Sourcemaps make debugging much easier in the browser.
+- On-demand secret loading keeps the UI responsive.
+- Token info in header provides good user context.
+
+What didn't
+- Initial Redux implementation tried to mutate a Set directly, causing Immer errors.
+- Tree depth was limited to 2 levels initially, preventing deep browsing.
+
+What I learned / notes
+- Redux Toolkit with Immer requires serializable state (no Sets, Maps, etc.).
+- Always enable sourcemaps for development builds.
+- User feedback is crucial - the "I can't browse deeper" issue was a major UX problem.
+
+Next
+- Implement generation endpoints (envrc/json/yaml) for single paths.
 
 ---
 

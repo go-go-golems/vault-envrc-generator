@@ -37,13 +37,13 @@ Out-of-scope for MVP (explicitly deferred)
 
 Stage 0 — Bootstrap skeleton (server + frontend shell)
 Goals
-- Create `serve` command under existing CLI using Glazed + `vaultlayer`.
-- Health endpoint: `GET /api/v1/health` returns 200.
-- Static hosting with SPA fallback; Vite proxy for dev.
+- [x] Create `serve` command under existing CLI using Glazed + `vaultlayer`.
+- [x] Health endpoint: `GET /api/v1/health` returns 200.
+- [x] Static hosting with SPA fallback; Vite proxy for dev.
 
 Scope
-- Embed `web/dist` via Go `embed` (empty scaffold at first).
-- Router + SPA fallback like `go-go-mento/go/cmd/frontend/serve.go`.
+- [x] Embed `web/dist` via Go `embed` (empty scaffold at first).
+- [x] Router + SPA fallback like `go-go-mento/go/cmd/frontend/serve.go`.
 
 Acceptance
 - `vault-envrc-generator serve --port 8080` serves index and health.
@@ -65,12 +65,12 @@ Goals
 - List directories/leaf markers without retrieving values.
 
 Backend
-- `GET /api/v1/vault/list/{path}` → use `pkg/vault.NormalizeListPath` + `pkg/vault.Client.ListSecrets`.
-- `GET /api/v1/vault/tree?path&depth&include=metadata` → build structure via `pkg/listing.Walk` (sorted, error slice). No values.
-- Extract `censorString` from `cmds/tree.go` into shared helper (`pkg/webserver/util`) for future stages.
+- [x] `GET /api/v1/vault/list/{path}` → use `pkg/vault.NormalizeListPath` + `pkg/vault.Client.ListSecrets`.
+- [x] `GET /api/v1/vault/tree?path&depth&include=metadata` → build structure via `pkg/listing.Walk` (sorted, error slice). No values.
+- [x] Censoring helper parity implemented in server (aligned with CLI behavior).
 
 Frontend
-- Tree Explorer page: path input, expand/collapse, show directory vs leaf, inline error badges.
+- [x] Tree Explorer page: path input, expand/collapse, show directory vs leaf, inline error badges.
 
 Acceptance
 - Navigating typical prefixes (e.g., `secrets/`) shows structure; errors appear inline.
@@ -85,13 +85,14 @@ Goals
 - Fetch leaf secret values on demand; default censored view.
 
 Backend
-- `GET /api/v1/vault/secrets/{path}` → `pkg/vault.Client.GetSecrets`.
-- `GET /api/v1/vault/tree?include=values&reveal=false` → materialize leaves, wrap as `__secret__` object; apply censoring (prefix/suffix from query; defaults 2/2).
-- Keep `/tree` default at `include=metadata` for safety.
-- Token sourcing from `vaultlayer`; allow `POST /vault/connect` only in `--dev-mode` for testing (never echo token).
+- [x] `GET /api/v1/vault/secrets/{path}` → `pkg/vault.Client.GetSecrets`.
+- [x] `GET /api/v1/vault/tree?include=values&reveal=false` → materialize leaves, wrap as `__secret__` object; apply censoring (prefix/suffix from query; defaults 2/2).
+- [x] Keep `/tree` default at `include=metadata` for safety.
+- [x] Token sourcing from `vaultlayer`.
+- [ ] `POST /vault/connect` (dev-mode only) — not implemented yet.
 
 Frontend
-- Secret drawer/viewer with per-key copy; reveal toggle (client requests reveal; server responds uncensored only when explicitly asked).
+- [x] Secret viewer (minimal inline) with reveal toggle semantics.
 
 Acceptance
 - Leaf retrieval works; censoring matches CLI behavior; reveal requires explicit toggle.
@@ -106,11 +107,11 @@ Goals
 - Parity with CLI `generate` for single path.
 
 Backend
-- `POST /api/v1/generate/{format}` using `pkg/envrc.Generator`.
-- Request: path, prefix, include/exclude, transform, sort, template file(optional).
+- [x] `POST /api/v1/generate/{format}` using `pkg/envrc.Generator`.
+- [x] Request: path, prefix, include/exclude, transform, sort, template file(optional), env_map.
 
 Frontend
-- Generate form with live preview; copy/download. No server-side file writes.
+- [ ] Generate form with live preview; copy/download. No server-side file writes.
 
 Acceptance
 - Outputs match CLI for representative fixtures (golden tests for all three formats).
@@ -125,11 +126,11 @@ Goals
 - Keep UI responsive for large trees; standardize errors.
 
 Backend
-- Standard error payload: `{ code, message, details? }`.
-- Caching hinting (in-memory per-request only); no persistent cache.
+- [x] Standard error payload: `{ code, message, details? }`.
+- [ ] Caching hinting (in-memory per-request only); no persistent cache.
 
 Frontend
-- Lazy loading on expand; virtualization for large nodes; debounce search.
+- [ ] Lazy loading on expand; virtualization for large nodes; debounce search.
 
 Acceptance
 - Large prefix lists render without jank; errors show uniformly.
@@ -144,12 +145,12 @@ Goals
 - Minimal batch integration to preview generated content without server-side writes.
 
 Backend
-- `POST /api/v1/batch/process` → wrap `pkg/batch.Processor` with `DryRun=true` enforced (ignore file writes, return aggregated outputs/logs)
-  - For envrc: aggregate into a single text blob per output path.
-  - For json/yaml: return merged object(s) per output path.
+- [x] `POST /api/v1/batch/process` → wrap `pkg/batch.Processor` with `DryRun=true` enforced (ignore file writes, return aggregated outputs/logs)
+  - [x] For envrc: aggregate into a single text blob per output path.
+  - [x] For json/yaml: return merged object(s) per output path.
 
 Frontend
-- Textarea/upload for YAML; show result tabs per output path; copy/download.
+- [ ] Textarea/upload for YAML; show result tabs per output path; copy/download.
 
 Acceptance
 - Known example configs produce identical dry-run outputs as CLI (stdout mode).
@@ -164,12 +165,12 @@ Goals
 - Biome linting; Dagger web build; embed assets; reproducible builds.
 
 Tasks
-- `web/` with pnpm+Vite; `biome.json` and scripts.
-- Dagger build (similar to `go-go-mento/go/cmd/dagger/build-web/main.go`) exporting `web/dist`.
-- `//go:generate` in serve command to run the Dagger build and embed `dist`.
+- [x] `web/` with pnpm+Vite; `biome.json` and scripts.
+- [x] Dagger build (similar to `go-go-mento/go/cmd/dagger/build-web/main.go`) exporting `web/dist`.
+- [x] `//go:generate` in server package to run the Dagger build and embed `dist`.
 
 Acceptance
-- `go generate ./... && go build` produces single binary serving the frontend.
+- [x] `go generate ./... && go build` produces single binary serving the frontend.
 
 ---
 
@@ -178,12 +179,12 @@ Goals
 - Confidence in endpoints and outputs; onboarding docs.
 
 Tests
-- Handlers: unit tests for `list/tree/secrets/generate`.
-- Golden tests: envrc/json/yaml against fixtures; batch dry-run results.
-- Frontend: critical rendering paths (tree node, secret viewer, generator preview).
+- [ ] Handlers: unit tests for `list/tree/secrets/generate`.
+- [ ] Golden tests: envrc/json/yaml against fixtures; batch dry-run results.
+- [ ] Frontend: critical rendering paths (tree node, secret viewer, generator preview).
 
 Docs
-- “Getting started” dev guide (Vite + serve); link to existing architecture and batch references.
+- [ ] “Getting started” dev guide (Vite + serve); link to existing architecture and batch references.
 
 Acceptance
 - CI passes tests; basic e2e manual verification steps documented.
@@ -197,8 +198,20 @@ Feature removals (from original spec) for MVP
 - Removed: server-side batch writes in production (web keeps DRY RUN only).
 
 Minimal surface area to ship MVP
-- Pages: Dashboard (optional splash), Explorer (required), Generator (required), Settings (minimal — depth + censor controls; Vault address read-only from env; dev-mode connect only).
-- API: `health`, `list`, `tree`, `secrets`, `generate/*`, `batch/process` (dry-run only), `vault/status`, `vault/connect` (dev-mode).
+- Pages:
+  - [x] Explorer (required)
+  - [ ] Generator (required)
+  - [ ] Settings (minimal — depth + censor controls; Vault address read-only from env; dev-mode connect only)
+  - [ ] Dashboard (optional)
+- API:
+  - [x] `health`
+  - [x] `list`
+  - [x] `tree`
+  - [x] `secrets`
+  - [x] `generate/*`
+  - [x] `batch/process` (dry-run only)
+  - [x] `vault/status`
+  - [ ] `vault/connect` (dev-mode)
 
 Rollout plan
 - 0.1.0: Stages 0–2 (read-only explorer with censoring + secret viewer).

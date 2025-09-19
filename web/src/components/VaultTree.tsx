@@ -1,23 +1,24 @@
 import React from 'react'
-
-type TreeData = Record<string, any>
+import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector'
+import { setPath, setIncludeValues, setReveal, setDepth, setLoading, setError, setTree, toggleNode } from '../store/vaultSlice'
 
 interface Props {
   rootPath: string
 }
 
 export const VaultTree: React.FC<Props> = ({ rootPath }) => {
-  const [path, setPath] = React.useState(rootPath)
-  const [tree, setTree] = React.useState<TreeData>({})
-  const [loading, setLoading] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
-  const [includeValues, setIncludeValues] = React.useState(false)
-  const [reveal, setReveal] = React.useState(false)
-  const [depth, setDepth] = React.useState(2)
+  const dispatch = useAppDispatch()
+  const { currentPath: path, tree, loading, error, includeValues, reveal, depth, expandedNodes } = useAppSelector(state => state.vault)
+  
+  React.useEffect(() => {
+    if (path !== rootPath) {
+      dispatch(setPath(rootPath))
+    }
+  }, [rootPath, path, dispatch])
 
   const fetchTree = React.useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    dispatch(setLoading(true))
+    dispatch(setError(null))
     try {
       const params = new URLSearchParams()
       params.set('path', path)
@@ -27,13 +28,13 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
       const r = await fetch(`/api/v1/vault/tree?${params.toString()}`)
       if (!r.ok) throw new Error(`${r.status}`)
       const j = await r.json()
-      setTree(j.tree ?? {})
+      dispatch(setTree(j.tree ?? {}))
     } catch (e: any) {
-      setError(e?.message ?? 'error')
+      dispatch(setError(e?.message ?? 'error'))
     } finally {
-      setLoading(false)
+      dispatch(setLoading(false))
     }
-  }, [path, includeValues, reveal, depth])
+  }, [dispatch, path, includeValues, reveal, depth])
 
   React.useEffect(() => {
     fetchTree()
@@ -52,7 +53,7 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
                 className="form-control form-control-sm"
                 style={{ minWidth: 200 }}
                 value={path} 
-                onChange={(e) => setPath(e.target.value)} 
+                onChange={(e) => dispatch(setPath(e.target.value))} 
               />
             </div>
             <div className="col-auto">
@@ -64,7 +65,7 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
                 className="form-control form-control-sm"
                 style={{ width: 70 }}
                 value={depth} 
-                onChange={(e) => setDepth(Number(e.target.value || 0))} 
+                onChange={(e) => dispatch(setDepth(Number(e.target.value || 0)))} 
               />
             </div>
             <div className="col-auto">
@@ -73,7 +74,7 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
                   className="form-check-input" 
                   type="checkbox" 
                   checked={includeValues} 
-                  onChange={(e) => setIncludeValues(e.target.checked)} 
+                  onChange={(e) => dispatch(setIncludeValues(e.target.checked))} 
                 />
                 <label className="form-check-label">Include values</label>
               </div>
@@ -84,7 +85,7 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
                   className="form-check-input" 
                   type="checkbox" 
                   checked={reveal} 
-                  onChange={(e) => setReveal(e.target.checked)} 
+                  onChange={(e) => dispatch(setReveal(e.target.checked))} 
                 />
                 <label className="form-check-label">Reveal</label>
               </div>
@@ -102,7 +103,7 @@ export const VaultTree: React.FC<Props> = ({ rootPath }) => {
       {!loading && !error && (
         <div className="card">
           <div className="card-body p-0">
-            <TreeNode name={path.replace(/\/$/, '') || 'root'} data={tree} level={0} />
+            <TreeNode name={path.replace(/\/$/, '') || 'root'} data={tree} level={0} nodePath="" />
           </div>
         </div>
       )}
@@ -114,19 +115,52 @@ interface NodeProps {
   name: string
   data: any
   level: number
+  nodePath: string
 }
 
-const TreeNode: React.FC<NodeProps> = ({ name, data, level }) => {
+const TreeNode: React.FC<NodeProps> = ({ name, data, level, nodePath }) => {
+  const dispatch = useAppDispatch()
+  const expandedNodes = useAppSelector(state => state.vault.expandedNodes)
+  const { reveal } = useAppSelector(state => state.vault)
   const isFolder = data && typeof data === 'object' && !data.__secret__
   const isSecret = data && typeof data === 'object' && data.__secret__
-  const [expanded, setExpanded] = React.useState(level < 1)
+  const fullPath = nodePath ? `${nodePath}/${name}` : name
+  const expanded = expandedNodes.includes(fullPath) || level < 1
+  const [loadingSecret, setLoadingSecret] = React.useState(false)
+  const [secretData, setSecretData] = React.useState<any>(null)
+
+  const handleSecretClick = async () => {
+    if (isSecret && !secretData && !loadingSecret) {
+      setLoadingSecret(true)
+      try {
+        const secretPath = fullPath.replace(/^secrets\//, '')
+        const params = new URLSearchParams()
+        if (reveal) params.set('reveal', 'true')
+        const r = await fetch(`/api/v1/vault/secrets/${secretPath}?${params.toString()}`)
+        if (r.ok) {
+          const j = await r.json()
+          setSecretData(j.secrets)
+        }
+      } catch (e) {
+        console.error('Failed to load secret:', e)
+      } finally {
+        setLoadingSecret(false)
+      }
+    }
+  }
   
   return (
     <div className={level > 0 ? 'border-start' : ''}>
       <div 
-        className={`p-2 d-flex align-items-center gap-2 ${isFolder ? 'text-decoration-none' : ''}`}
-        style={{ cursor: isFolder ? 'pointer' : 'default' }}
-        onClick={() => isFolder && setExpanded((v) => !v)}
+        className={`p-2 d-flex align-items-center gap-2 ${(isFolder || isSecret) ? 'text-decoration-none' : ''}`}
+        style={{ cursor: (isFolder || isSecret) ? 'pointer' : 'default' }}
+        onClick={() => {
+          if (isFolder) {
+            dispatch(toggleNode(fullPath))
+          } else if (isSecret) {
+            handleSecretClick()
+          }
+        }}
         onMouseEnter={(e) => e.currentTarget.classList.add('bg-light')}
         onMouseLeave={(e) => e.currentTarget.classList.remove('bg-light')}
       >
@@ -137,19 +171,36 @@ const TreeNode: React.FC<NodeProps> = ({ name, data, level }) => {
           {name}
         </span>
         {name.endsWith('__error__') && <span className="text-danger small">⚠️</span>}
+        {loadingSecret && <span className="spinner-border spinner-border-sm text-primary" />}
       </div>
       {expanded && isFolder && (
         <div className="ms-3">
           {Object.entries(data).map(([k, v]) => (
-            <TreeNode key={k} name={k} data={v as any} level={level + 1} />
+            <TreeNode key={k} name={k} data={v as any} level={level + 1} nodePath={fullPath} />
           ))}
         </div>
       )}
-      {isSecret && (
+      {(isSecret && secretData) && (
         <div className="ms-4 me-2 mb-2">
-          <pre className="bg-light p-2 rounded small text-muted mb-0">
-            {JSON.stringify(data, null, 2)}
-          </pre>
+          <div className="card">
+            <div className="card-body p-2">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <small className="text-muted">Secret: {fullPath}</small>
+                <button 
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSecretData(null)
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+              <pre className="bg-light p-2 rounded small mb-0" style={{ fontSize: 11 }}>
+                {JSON.stringify(secretData, null, 2)}
+              </pre>
+            </div>
+          </div>
         </div>
       )}
     </div>

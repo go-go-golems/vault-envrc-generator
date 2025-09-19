@@ -33,6 +33,11 @@ func NewClient(address, token string) (*Client, error) {
 	return &Client{client: client}, nil
 }
 
+// GetAPIClient returns the underlying Vault API client for advanced operations
+func (c *Client) GetAPIClient() *api.Client {
+	return c.client
+}
+
 // GetSecrets retrieves secrets from the given path, handling both KV v1 and v2
 func (c *Client) GetSecrets(path string) (map[string]interface{}, error) {
 	mountPath, secretPath := c.parsePath(path)

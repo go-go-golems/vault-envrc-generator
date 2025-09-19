@@ -62,10 +62,10 @@ func (c *ServeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	}
 
 	server := webserver.New(&webserver.Config{
-		Host:        s.Host,
-		Port:        s.Port,
-		DevMode:     s.DevMode,
-		Vault:       vs,
+		Host:    s.Host,
+		Port:    s.Port,
+		DevMode: s.DevMode,
+		Vault:   vs,
 	})
 
 	// CORS is not yet enforced at Stage 0; placeholder parses the setting
@@ -73,5 +73,3 @@ func (c *ServeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 
 	return server.Start(ctx)
 }
-
-

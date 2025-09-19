@@ -11,18 +11,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
+	"github.com/rs/zerolog/log"
 )
 
 //go:embed web/dist
 var embeddedDist embed.FS
 
 type Config struct {
-	Host string
-	Port string
+	Host    string
+	Port    string
 	DevMode bool
-	Vault *vaultlayer.VaultSettings
+	Vault   *vaultlayer.VaultSettings
 }
 
 type Server struct {
@@ -140,5 +140,3 @@ type emptyFS struct{}
 func (e *emptyFS) Open(name string) (fs.File, error) {
 	return nil, fs.ErrNotExist
 }
-
-

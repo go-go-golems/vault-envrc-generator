@@ -26,6 +26,8 @@ type SeedCommand struct{ *gcmds.CommandDescription }
 type SeedSettings struct {
 	Config    string   `glazed.parameter:"config"`
 	DryRun    bool     `glazed.parameter:"dry-run"`
+	Diff      bool     `glazed.parameter:"diff"`
+	Confirm   bool     `glazed.parameter:"confirm"`
 	BasePath  string   `glazed.parameter:"base-path"`
 	Sets      []string `glazed.parameter:"sets"`
 	Force     bool     `glazed.parameter:"force"`
@@ -46,6 +48,8 @@ func NewSeedCommand() (*SeedCommand, error) {
 		gcmds.WithFlags(
 			parameters.NewParameterDefinition("config", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithHelp("Seed YAML file"), parameters.WithShortFlag("c")),
 			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Preview without writing to Vault")),
+			parameters.NewParameterDefinition("diff", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Show a diff vs existing secrets (implied by --dry-run)")),
+			parameters.NewParameterDefinition("confirm", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Ask for confirmation after showing diff before applying")),
 			parameters.NewParameterDefinition("base-path", parameters.ParameterTypeString, parameters.WithHelp("Override base_path (supports Go templates)")),
 			parameters.NewParameterDefinition("sets", parameters.ParameterTypeStringList, parameters.WithHelp("Only seed sets whose path matches any of these; default all")),
 			parameters.NewParameterDefinition("force", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite existing keys without prompting")),
@@ -138,7 +142,14 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 		}
 	}
 
-	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun, ForceOverwrite: s.Force, AllowCommands: s.AllowCmd, ExtraTemplateData: extra})
+	return seed.Run(client, &spec, seed.Options{
+		DryRun:            s.DryRun,
+		ForceOverwrite:    s.Force,
+		AllowCommands:     s.AllowCmd,
+		ExtraTemplateData: extra,
+		ShowDiff:          s.Diff || s.DryRun,
+		ConfirmApply:      s.Confirm,
+	})
 }
 
 var _ gcmds.BareCommand = &SeedCommand{}

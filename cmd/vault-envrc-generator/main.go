@@ -148,5 +148,13 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if dc, err := appcmds.NewDiffEnvCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(dc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	cobra.CheckErr(rootCmd.Execute())
 }

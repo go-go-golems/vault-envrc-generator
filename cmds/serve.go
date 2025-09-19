@@ -56,7 +56,7 @@ func (c *ServeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 	}
 
 	// Parse vault settings to ensure environment is wired (even if unused at Stage 0)
-	_, err := vaultlayer.GetVaultSettings(parsed)
+	vs, err := vaultlayer.GetVaultSettings(parsed)
 	if err != nil {
 		return err
 	}
@@ -65,6 +65,7 @@ func (c *ServeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) er
 		Host:        s.Host,
 		Port:        s.Port,
 		DevMode:     s.DevMode,
+		Vault:       vs,
 	})
 
 	// CORS is not yet enforced at Stage 0; placeholder parses the setting

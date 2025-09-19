@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
 )
 
 //go:embed web/dist
@@ -21,6 +22,7 @@ type Config struct {
 	Host string
 	Port string
 	DevMode bool
+	Vault *vaultlayer.VaultSettings
 }
 
 type Server struct {
@@ -57,6 +59,10 @@ func (s *Server) setupRoutes() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
+
+	// Vault endpoints (Stage 1)
+	s.mux.HandleFunc("/api/v1/vault/list/", s.handleVaultList)
+	s.mux.HandleFunc("/api/v1/vault/tree", s.handleVaultTree)
 
 	// Static files with SPA fallback
 	fileServer := http.FileServer(http.FS(s.assets))

@@ -156,5 +156,13 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if sc2, err := appcmds.NewServeCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(sc2, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	cobra.CheckErr(rootCmd.Execute())
 }

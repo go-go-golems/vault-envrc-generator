@@ -1,7 +1,7 @@
 import React from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAppSelector, useAppDispatch } from '../hooks/useAppSelector'
-import { setPath, setIncludeValues, setReveal, setDepth, setLoading, setError, setTree } from '../store/vaultSlice'
+import { setPath, setIncludeValues, setReveal, setDepth, setLoading, setError, setTree, setNodeChildren } from '../store/vaultSlice'
 import VaultTreeNode from '../components/VaultTreeNode'
 import SecretViewer from '../components/SecretViewer'
 import PathBreadcrumb from '../components/PathBreadcrumb'
@@ -21,27 +21,41 @@ const Explorer: React.FC = () => {
     }
   }, [searchParams, currentPath, dispatch])
 
-  const fetchTree = React.useCallback(async () => {
+  const fetchRootLevel = React.useCallback(async () => {
     if (!currentPath) return
 
     dispatch(setLoading(true))
     dispatch(setError(null))
     
     try {
-      const params = new URLSearchParams()
-      params.set('path', currentPath)
-      if (depth > 0) params.set('depth', String(depth))
-      if (includeValues) params.set('include', 'values')
-      if (reveal) params.set('reveal', 'true')
-      
-      const response = await fetch(`/api/v1/vault/tree?${params.toString()}`)
+      // Use the list endpoint to get immediate children only
+      let cleanPath = currentPath.replace(/^secrets\//, '').replace(/\/$/, '')
+      // Backend now accepts empty path for root listing
+      const response = await fetch(`/api/v1/vault/list/${cleanPath}`)
       
       if (!response.ok) {
-        throw new Error(`Failed to fetch tree: ${response.status} ${response.statusText}`)
+        throw new Error(`Failed to fetch directory: ${response.status} ${response.statusText}`)
       }
       
       const data = await response.json()
-      dispatch(setTree(data.tree || {}))
+      
+      // Convert list response to tree structure
+      const rootTree: Record<string, any> = {}
+      
+      if (data.keys && Array.isArray(data.keys)) {
+        for (const key of data.keys) {
+          const isFolder = key.endsWith('/')
+          const cleanKey = key.replace(/\/$/, '')
+          
+          rootTree[cleanKey] = {
+            isSecret: !isFolder,
+            children: isFolder ? {} : undefined,
+            loaded: false
+          }
+        }
+      }
+      
+      dispatch(setTree(rootTree))
       
       // Update recent paths
       const recentPaths = JSON.parse(localStorage.getItem('recentPaths') || '[]')
@@ -49,15 +63,15 @@ const Explorer: React.FC = () => {
       localStorage.setItem('recentPaths', JSON.stringify(updatedPaths))
       
     } catch (error: any) {
-      dispatch(setError(error?.message || 'Failed to load tree'))
+      dispatch(setError(error?.message || 'Failed to load directory'))
     } finally {
       dispatch(setLoading(false))
     }
-  }, [dispatch, currentPath, includeValues, reveal, depth])
+  }, [dispatch, currentPath])
 
   React.useEffect(() => {
-    fetchTree()
-  }, [fetchTree])
+    fetchRootLevel()
+  }, [fetchRootLevel])
 
   const handlePathChange = (newPath: string) => {
     dispatch(setPath(newPath))
@@ -68,18 +82,24 @@ const Explorer: React.FC = () => {
     setSelectedSecret(secretPath)
   }
 
+  const handleNodeExpand = async (nodePath: string) => {
+    // This will be handled by the VaultTreeNode component itself
+    console.log('Node expand requested:', nodePath)
+  }
+
   const filteredTree = React.useMemo(() => {
     if (!searchTerm) return tree
     
     const filterNode = (node: any, path: string): any => {
       if (typeof node !== 'object' || !node) return node
       
-      if (node.__secret__) {
+      if (node.isSecret) {
         return path.toLowerCase().includes(searchTerm.toLowerCase()) ? node : null
       }
       
       const filtered: any = {}
-      for (const [key, value] of Object.entries(node)) {
+      const children = node.children || {}
+      for (const [key, value] of Object.entries(children)) {
         const fullPath = path ? `${path}/${key}` : key
         if (key.toLowerCase().includes(searchTerm.toLowerCase())) {
           filtered[key] = value
@@ -91,11 +111,19 @@ const Explorer: React.FC = () => {
         }
       }
       
-      return Object.keys(filtered).length > 0 ? filtered : null
+      return Object.keys(filtered).length > 0 ? { ...node, children: filtered } : null
     }
     
-    return filterNode(tree, currentPath) || {}
-  }, [tree, searchTerm, currentPath])
+    const result: Record<string, any> = {}
+    for (const [key, value] of Object.entries(tree)) {
+      const filteredNode = filterNode(value, key)
+      if (filteredNode !== null) {
+        result[key] = filteredNode
+      }
+    }
+    
+    return result
+  }, [tree, searchTerm])
 
   return (
     <div className="container-fluid h-100">
@@ -127,13 +155,13 @@ const Explorer: React.FC = () => {
                 </div>
                 
                 <div className="col-md-2">
-                  <label className="form-label fw-semibold">Depth:</label>
+                  <label className="form-label fw-semibold">Auto-expand Depth:</label>
                   <select 
                     className="form-select"
                     value={depth}
                     onChange={(e) => dispatch(setDepth(Number(e.target.value)))}
+                    title="How many levels to auto-expand when clicking folders"
                   >
-                    <option value={0}>Unlimited</option>
                     <option value={1}>1 level</option>
                     <option value={2}>2 levels</option>
                     <option value={3}>3 levels</option>
@@ -200,7 +228,7 @@ const Explorer: React.FC = () => {
                   <div className="d-flex gap-2 justify-content-end">
                     <button 
                       className="btn btn-primary"
-                      onClick={fetchTree}
+                      onClick={fetchRootLevel}
                       disabled={loading}
                     >
                       {loading ? (
@@ -251,17 +279,26 @@ const Explorer: React.FC = () => {
             <div className="card-body p-0" style={{ overflowY: 'auto' }}>
               {Object.keys(filteredTree).length > 0 ? (
                 <div className="tree-container">
-                  {Object.entries(filteredTree).map(([name, data]) => (
-                    <VaultTreeNode
-                      key={name}
-                      name={name}
-                      data={data}
-                      path={currentPath}
-                      level={0}
-                      onSecretSelect={handleSecretSelect}
-                      selectedSecret={selectedSecret}
-                    />
-                  ))}
+                  {Object.entries(filteredTree)
+                    .sort(([a, aData], [b, bData]) => {
+                      // Sort folders first, then secrets
+                      const aIsFolder = !aData.isSecret
+                      const bIsFolder = !bData.isSecret
+                      if (aIsFolder && !bIsFolder) return -1
+                      if (!aIsFolder && bIsFolder) return 1
+                      return a.localeCompare(b)
+                    })
+                    .map(([name, data]) => (
+                      <VaultTreeNode
+                        key={name}
+                        name={name}
+                        data={data}
+                        path={currentPath}
+                        level={0}
+                        onSecretSelect={handleSecretSelect}
+                        selectedSecret={selectedSecret}
+                      />
+                    ))}
                 </div>
               ) : !loading && (
                 <div className="text-center py-5 text-muted">

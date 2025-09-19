@@ -160,15 +160,3 @@ Next
 - Implement generation endpoints (envrc/json/yaml) for single paths.
 
 ---
-
-## Operational notes
-- Run server: `tmux new -d -s veg-serve 'go run ./cmd/vault-envrc-generator serve --port 8085 --host 127.0.0.1 --dev-mode'`
-- Check health: `curl -sS http://127.0.0.1:8085/api/v1/health`
-- Tree (metadata): `curl -sS 'http://127.0.0.1:8085/api/v1/vault/tree?path=secrets/&depth=2'`
-- List: `curl -sS http://127.0.0.1:8085/api/v1/vault/list/secrets/`
-- Tree (values, censored): `curl -sS 'http://127.0.0.1:8085/api/v1/vault/tree?path=secrets/&depth=1&include=values'`
-- Tree (values, reveal): `curl -sS 'http://127.0.0.1:8085/api/v1/vault/tree?path=secrets/&depth=1&include=values&reveal=true'`
-
-Future work
-- Secrets endpoint; single-path generation (envrc/json/yaml); batch dry-run.
-- Error model standardization; CORS; auth hardening (dev-mode token rules).

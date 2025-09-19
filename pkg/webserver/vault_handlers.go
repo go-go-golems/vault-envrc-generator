@@ -45,10 +45,8 @@ func (s *Server) handleVaultList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	listPath := strings.TrimPrefix(r.URL.Path, prefix)
-	if listPath == "" {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Code: "bad_request", Message: "missing path"})
-		return
-	}
+	// Allow empty path for root listing
+	// listPath can be empty for root directory listing
 
     // depth parameter accepted for forward-compatibility; unused in metadata list
     // _ = r.URL.Query().Get("depth")

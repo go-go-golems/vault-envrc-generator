@@ -1,6 +1,6 @@
 import React from 'react'
 import { useAppDispatch, useAppSelector } from '../hooks/useAppSelector'
-import { toggleNode } from '../store/vaultSlice'
+import { toggleNode, setNodeChildren, setNodeLoading, setNodeError } from '../store/vaultSlice'
 
 interface VaultTreeNodeProps {
   name: string
@@ -20,26 +20,81 @@ const VaultTreeNode: React.FC<VaultTreeNodeProps> = ({
   selectedSecret 
 }) => {
   const dispatch = useAppDispatch()
-  const expandedNodes = useAppSelector(state => state.vault.expandedNodes)
+  const { expandedNodes, depth, reveal } = useAppSelector(state => state.vault)
   
-  const fullPath = path ? `${path}${name}` : name
-  const isFolder = data && typeof data === 'object' && !data.__secret__
-  const isSecret = data && typeof data === 'object' && data.__secret__
-  const hasError = name.endsWith('__error__')
-  const isExpanded = expandedNodes.includes(fullPath) || level === 0
-  const isSelected = selectedSecret === fullPath
+  const fullPath = path ? `${path}${name}/` : `${name}/`
+  const isFolder = !data.isSecret
+  const isSecret = data.isSecret
+  const hasError = data.error || name.endsWith('__error__')
+  const isExpanded = expandedNodes.includes(fullPath)
+  const isSelected = selectedSecret === fullPath.replace(/\/$/, '')
+  const isLoading = data.loading || false
+  const hasChildren = data.children && Object.keys(data.children).length > 0
+  const isLoaded = data.loaded || false
 
-  const handleClick = () => {
-    if (isFolder) {
-      dispatch(toggleNode(fullPath))
-    } else if (isSecret) {
-      onSecretSelect(fullPath)
+  const fetchChildren = async (nodePath: string) => {
+    if (isLoaded || isLoading) return
+
+    dispatch(setNodeLoading({ nodePath, loading: true }))
+    
+    try {
+      // Convert full path to API path (remove secrets/ prefix and trailing slash)
+      let apiPath = nodePath.replace(/^secrets\//, '').replace(/\/$/, '')
+      // Backend now accepts empty path for root listing
+      const response = await fetch(`/api/v1/vault/list/${apiPath}`)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch children: ${response.status}`)
+      }
+      
+      const responseData = await response.json()
+      const children: Record<string, any> = {}
+      
+      if (responseData.keys && Array.isArray(responseData.keys)) {
+        for (const key of responseData.keys) {
+          const isChildFolder = key.endsWith('/')
+          const cleanKey = key.replace(/\/$/, '')
+          
+          children[cleanKey] = {
+            isSecret: !isChildFolder,
+            children: isChildFolder ? {} : undefined,
+            loaded: false
+          }
+        }
+      }
+      
+      dispatch(setNodeChildren({ nodePath, children }))
+    } catch (error: any) {
+      dispatch(setNodeError({ nodePath, error: error?.message || 'Failed to load' }))
     }
   }
+
+  const handleClick = async () => {
+    if (isFolder) {
+      const wasExpanded = isExpanded
+      dispatch(toggleNode(fullPath))
+      
+      // If we're expanding and haven't loaded children yet, fetch them
+      if (!wasExpanded && !isLoaded) {
+        await fetchChildren(fullPath)
+      }
+    } else if (isSecret) {
+      onSecretSelect(fullPath.replace(/\/$/, ''))
+    }
+  }
+
+  // Auto-expand based on depth setting (only for newly loaded nodes)
+  React.useEffect(() => {
+    if (isFolder && !isExpanded && level < depth && !isLoaded) {
+      dispatch(toggleNode(fullPath))
+      fetchChildren(fullPath)
+    }
+  }, [isFolder, isExpanded, level, depth, isLoaded, fullPath, dispatch])
 
   const getIcon = () => {
     if (hasError) return 'bi-exclamation-triangle-fill text-danger'
     if (isSecret) return 'bi-key-fill text-primary'
+    if (isLoading) return 'spinner-border spinner-border-sm text-warning'
     return isExpanded ? 'bi-folder2-open text-warning' : 'bi-folder-fill text-warning'
   }
 
@@ -60,7 +115,15 @@ const VaultTreeNode: React.FC<VaultTreeNodeProps> = ({
         role="button"
         tabIndex={0}
       >
-        <i className={`bi ${getIcon()} me-2`} style={{ fontSize: '0.9rem' }}></i>
+        <div className="me-2 d-flex align-items-center" style={{ width: '16px', height: '16px' }}>
+          {isLoading ? (
+            <div className="spinner-border spinner-border-sm text-primary" style={{ fontSize: '0.6rem', width: '12px', height: '12px' }} role="status">
+              <span className="visually-hidden">Loading...</span>
+            </div>
+          ) : (
+            <i className={`bi ${getIcon()}`} style={{ fontSize: '0.9rem' }}></i>
+          )}
+        </div>
         
         <span className={`flex-grow-1 ${isSecret ? 'fw-medium' : ''}`}>
           {hasError ? name.replace('__error__', '') : name}
@@ -76,7 +139,7 @@ const VaultTreeNode: React.FC<VaultTreeNodeProps> = ({
               className={`btn btn-sm ${isSelected ? 'btn-light' : 'btn-outline-primary'}`}
               onClick={(e) => {
                 e.stopPropagation()
-                onSecretSelect(fullPath)
+                onSecretSelect(fullPath.replace(/\/$/, ''))
               }}
               title="View secret details"
             >
@@ -86,20 +149,27 @@ const VaultTreeNode: React.FC<VaultTreeNodeProps> = ({
         )}
 
         {isFolder && (
-          <i 
-            className={`bi ${isExpanded ? 'bi-chevron-down' : 'bi-chevron-right'} text-muted ms-2`}
-            style={{ fontSize: '0.75rem' }}
-          ></i>
+          <div className="d-flex align-items-center ms-2">
+            {(hasChildren || isLoaded) && (
+              <small className="text-muted me-2">
+                {Object.keys(data.children || {}).length}
+              </small>
+            )}
+            <i 
+              className={`bi ${isExpanded ? 'bi-chevron-down' : 'bi-chevron-right'} text-muted`}
+              style={{ fontSize: '0.75rem' }}
+            ></i>
+          </div>
         )}
       </div>
 
-      {isExpanded && isFolder && (
+      {isExpanded && isFolder && hasChildren && (
         <div>
-          {Object.entries(data)
-            .sort(([a], [b]) => {
+          {Object.entries(data.children || {})
+            .sort(([a, aData], [b, bData]) => {
               // Sort folders first, then secrets
-              const aIsFolder = typeof data[a] === 'object' && !data[a].__secret__
-              const bIsFolder = typeof data[b] === 'object' && !data[b].__secret__
+              const aIsFolder = !aData.isSecret
+              const bIsFolder = !bData.isSecret
               if (aIsFolder && !bIsFolder) return -1
               if (!aIsFolder && bIsFolder) return 1
               return a.localeCompare(b)
@@ -109,12 +179,31 @@ const VaultTreeNode: React.FC<VaultTreeNodeProps> = ({
                 key={childName}
                 name={childName}
                 data={childData}
-                path={`${fullPath}/`}
+                path={fullPath}
                 level={level + 1}
                 onSecretSelect={onSecretSelect}
                 selectedSecret={selectedSecret}
               />
             ))}
+        </div>
+      )}
+
+      {isExpanded && isFolder && data.error && (
+        <div style={getIndentStyle()}>
+          <div className="py-2 px-3 text-danger small">
+            <i className="bi bi-exclamation-triangle me-1"></i>
+            Error loading children: {data.error}
+            <button 
+              className="btn btn-sm btn-outline-danger ms-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                fetchChildren(fullPath)
+              }}
+            >
+              <i className="bi bi-arrow-clockwise me-1"></i>
+              Retry
+            </button>
+          </div>
         </div>
       )}
     </>

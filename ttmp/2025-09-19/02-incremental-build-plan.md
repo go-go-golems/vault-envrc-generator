@@ -100,6 +100,10 @@ Acceptance
 Risks/Mitigations
 - Accidental value exposure: default to censored; explicit `reveal=true` required per request.
 
+**Known Issues & Fixes:**
+- [x] **Tree Depth & Lazy Loading**: Initial implementation loads everything at depth=0, causing performance issues. Fixed by implementing on-demand subdirectory fetching: clicking folder nodes calls `/api/v1/vault/list/{path}` to fetch immediate children only. This improves performance and user experience.
+- [x] **Empty Path Error**: Backend vault list handler rejected empty paths with "missing path" error. Fixed by removing the empty path validation in `pkg/webserver/vault_handlers.go` line 48-51, allowing root directory listing with empty path parameter.
+
 ---
 
 Stage 3 — Single-path generation (envrc/json/yaml)
@@ -230,4 +234,30 @@ Success criteria (MVP)
 - Retrieve leaf secrets on demand; errors inline and consistent.
 - Generate envrc/json/yaml for a single path with CLI parity.
 - Batch dry-run previews match CLI stdout mode for sample configs.
+
+## How to run and kill
+
+- Run (dev, with sourcemapped web assets):
+```bash
+cd vault-envrc-generator
+go generate ./pkg/webserver
+go run ./cmd/vault-envrc-generator serve --port 8085 --host 127.0.0.1 --dev-mode
+```
+
+- Build and run binary:
+```bash
+go build ./cmd/vault-envrc-generator
+./vault-envrc-generator serve --port 8085 --host 127.0.0.1 --dev-mode
+```
+
+- Kill whatever runs on port 8085 (preferred):
+```bash
+lsof-who -p 8085 -k -s TERM
+```
+
+- Optional tmux (background):
+```bash
+tmux new -d -s veg-serve 'go run ./cmd/vault-envrc-generator serve --port 8085 --host 127.0.0.1 --dev-mode'
+tmux kill-session -t veg-serve
+```
 

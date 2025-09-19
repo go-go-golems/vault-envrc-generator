@@ -17,7 +17,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "@reduxjs/toolkit": "^2.3.0",
-    "react-redux": "^9.1.2"
+    "react-redux": "^9.1.2",
+    "bootstrap-icons": "^1.11.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

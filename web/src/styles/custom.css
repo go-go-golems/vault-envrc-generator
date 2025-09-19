@@ -1,0 +1,163 @@
+/* Custom styles for Vault Envrc Generator */
+
+/* Hover effects */
+.hover-bg-light:hover {
+  background-color: var(--bs-light) !important;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Tree styling */
+.tree-container {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Consolas', monospace;
+  font-size: 0.875rem;
+}
+
+/* Sidebar active nav links */
+.nav-link.active {
+  background-color: var(--bs-primary) !important;
+  color: white !important;
+}
+
+.nav-link:not(.active):hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Connection status indicators */
+.bi-circle-fill {
+  font-size: 0.5rem;
+}
+
+/* Card enhancements */
+.card {
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+  border: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.card:hover {
+  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.15);
+  transition: box-shadow 0.15s ease-in-out;
+}
+
+/* Tab content styling */
+.tab-content {
+  border: 1px solid #dee2e6;
+  border-top: none;
+}
+
+/* Code and pre styling improvements */
+pre {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Consolas', monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+code {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Fira Mono', 'Droid Sans Mono', 'Consolas', monospace;
+}
+
+/* Breadcrumb improvements */
+.breadcrumb {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+}
+
+.breadcrumb .btn-link {
+  color: var(--bs-primary);
+  text-decoration: none;
+}
+
+.breadcrumb .btn-link:hover {
+  text-decoration: underline;
+}
+
+/* Tree node indentation styling */
+.tree-node-content {
+  border-left: 1px solid #dee2e6;
+  margin-left: 1rem;
+}
+
+/* Loading spinner improvements */
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Alert enhancements */
+.alert {
+  border: none;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+/* Button group spacing */
+.btn-group .btn {
+  border-radius: 0.375rem !important;
+}
+
+.btn-group .btn:not(:first-child) {
+  margin-left: 0.25rem;
+}
+
+/* Form styling improvements */
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Custom scrollbar for webkit browsers */
+.card-body::-webkit-scrollbar,
+pre::-webkit-scrollbar {
+  width: 8px;
+}
+
+.card-body::-webkit-scrollbar-track,
+pre::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.card-body::-webkit-scrollbar-thumb,
+pre::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.card-body::-webkit-scrollbar-thumb:hover,
+pre::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Badge improvements */
+.badge {
+  font-weight: 500;
+}
+
+/* List group enhancements */
+.list-group-item-action:hover {
+  background-color: var(--bs-light);
+  color: var(--bs-primary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .d-md-flex {
+    flex-direction: column;
+  }
+  
+  .btn-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .btn-group .btn {
+    margin-left: 0;
+    margin-bottom: 0.25rem;
+  }
+}
+
+/* Dark mode support (future enhancement) */
+@media (prefers-color-scheme: dark) {
+  /* Dark mode styles would go here */
+}

@@ -1,13 +1,19 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { VaultTree } from './components/VaultTree'
 
 function App() {
   return (
-    <div style={{ padding: 16 }}>
-      <h1>Vault Envrc Generator Web</h1>
-      <p>
-        API health: <Health />
-      </p>
+    <div className="container-fluid">
+      <header className="border-bottom pb-2 mb-4">
+        <h1 className="h2 mb-1 text-primary">Vault Envrc Generator</h1>
+        <small className="text-muted">
+          API health: <Health />
+        </small>
+      </header>
+      <main>
+        <VaultTree rootPath="secrets/" />
+      </main>
     </div>
   )
 }
@@ -20,7 +26,7 @@ function Health() {
       .then((j) => setStatus(j.status ?? 'ok'))
       .catch(() => setStatus('unavailable'))
   }, [])
-  return <code>{status}</code>
+  return <code className={status === 'ok' ? 'text-success' : 'text-danger'}>{status}</code>
 }
 
 const el = document.getElementById('root')!

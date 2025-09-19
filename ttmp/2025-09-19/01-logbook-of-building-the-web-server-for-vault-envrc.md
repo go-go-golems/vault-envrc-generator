@@ -87,6 +87,26 @@ Next
 
 ---
 
+## Stage 4 — UI: Tree explorer scaffold
+- Implemented `VaultTree` component with:
+  - Path input, depth selection, include values + reveal toggles
+  - Fetch to `/api/v1/vault/tree` and basic render (folders, leaf `__secret__` nodes)
+- Integrated into `src/main.tsx` and rebuilt via `go generate` (Dagger), verified UI loads.
+
+What worked
+- Simple recursive component is enough to validate API wiring.
+
+What didn’t
+- None.
+
+What I learned / notes
+- Keep UI minimal first; wire controls to API semantics early.
+
+Next
+- Add `SecretViewer` to fetch/display leaf data; refine tree expand/collapse.
+
+---
+
 ## Operational notes
 - Run server: `tmux new -d -s veg-serve 'go run ./cmd/vault-envrc-generator serve --port 8085 --host 127.0.0.1 --dev-mode'`
 - Check health: `curl -sS http://127.0.0.1:8085/api/v1/health`

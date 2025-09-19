@@ -90,6 +90,17 @@ func (c *TreeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) err
 			}
 			return err
 		}
+
+		// If no keys were returned, this might be a leaf secret; attempt to read it
+		if len(keys) == 0 {
+			trimmed := strings.TrimSuffix(prefix, "/")
+			if trimmed != "" {
+				if data, err2 := client.GetSecrets(trimmed); err2 == nil {
+					node["__secret__"] = materializeData(data, s.Reveal, s.CensorPrefix, s.CensorSuffix)
+					return nil
+				}
+			}
+		}
 		for _, k := range keys {
 			if strings.HasSuffix(k, "/") {
 				name := strings.TrimSuffix(k, "/")

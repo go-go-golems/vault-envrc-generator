@@ -114,6 +114,14 @@ sections:
       GOOGLE_CLIENT_SECRET: client_secret
     fixed:
       GOOGLE_PROVIDER: "oauth2"
+
+  - name: stytch-management
+    description: "STYTCH Management API credentials (shared namespace)"
+    # Use absolute path to read from shared namespace regardless of base_path
+    path: /secrets/shared/stytch/management
+    env_map:
+      STYTCH_MANAGEMENT_API_KEY_ID: key_id
+      STYTCH_MANAGEMENT_API_SECRET: secret
 ```
 
 #### Section fields

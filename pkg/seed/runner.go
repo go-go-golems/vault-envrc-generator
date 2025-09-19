@@ -21,6 +21,8 @@ type Options struct {
 	ForceOverwrite    bool
 	AllowCommands     bool
 	ExtraTemplateData map[string]interface{}
+	ShowDiff          bool
+	ConfirmApply      bool
 }
 
 type userDecision int
@@ -341,9 +343,26 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			continue
 		}
 
+		// Compute and optionally print diff vs existing secrets
+		var existing map[string]interface{}
+		existing, _ = client.GetSecrets(renderedTarget)
+		if opts.DryRun || opts.ShowDiff {
+			printDiff(renderedTarget, existing, data)
+		}
+
+		// If dry-run, do not write
 		if opts.DryRun {
-			log.Debug().Str("path", renderedTarget).Interface("keys", keysOf(data)).Msg("seed: dry-run put")
 			continue
+		}
+
+		// Ask for a confirmation per path after diff if requested
+		if opts.ConfirmApply {
+			prompt := fmt.Sprintf("Apply changes to '%s'? [y/N]: ", renderedTarget)
+			dec := askForDecision(prompt)
+			if dec != decYes && dec != decAllYes {
+				log.Debug().Str("path", renderedTarget).Msg("seed: user declined apply")
+				continue
+			}
 		}
 
 		// Handle overwrite confirmations when existing values are present
@@ -355,6 +374,12 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 					return fmt.Errorf("failed to check existing secrets at %s: %w", renderedTarget, err)
 				}
 			} else if len(existing) > 0 {
+				// Remove unchanged keys to avoid redundant writes
+				for k, v := range data {
+					if old, ok := existing[k]; ok && convertToString(old) == convertToString(v) {
+						delete(data, k)
+					}
+				}
 				for key := range data {
 					if _, ok := existing[key]; ok {
 						if overwriteAllSkip {
@@ -447,14 +472,6 @@ func storeSetupCommandOutput(key string) bool {
 	default:
 		return true
 	}
-}
-
-func keysOf(m map[string]interface{}) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	return ks
 }
 
 // askForDecision prompts the user for y/N/a/s and returns a decision
@@ -640,5 +657,46 @@ func convertToString(value interface{}) string {
 			return string(data)
 		}
 		return fmt.Sprintf("%v", value)
+	}
+}
+
+// printDiff renders a simple key-level diff between existing and desired data
+func printDiff(path string, existing map[string]interface{}, desired map[string]interface{}) {
+	type change struct{ key, op, old, new string }
+	changes := []change{}
+	// Deletions (existing but not desired)
+	for k, v := range existing {
+		if _, ok := desired[k]; !ok {
+			changes = append(changes, change{key: k, op: "-", old: convertToString(v), new: ""})
+		}
+	}
+	// Additions and updates
+	for k, v := range desired {
+		nv := convertToString(v)
+		if ov, ok := existing[k]; ok {
+			ovs := convertToString(ov)
+			if ovs != nv {
+				changes = append(changes, change{key: k, op: "~", old: ovs, new: nv})
+			}
+		} else {
+			changes = append(changes, change{key: k, op: "+", old: "", new: nv})
+		}
+	}
+	if len(changes) == 0 {
+		log.Info().Str("path", path).Msg("seed: no changes (up to date)")
+		return
+	}
+	log.Info().Str("path", path).Int("changes", len(changes)).Msg("seed: diff")
+	// Stable ordering
+	sort.Slice(changes, func(i, j int) bool { return changes[i].key < changes[j].key })
+	for _, c := range changes {
+		switch c.op {
+		case "+":
+			fmt.Printf("+ %s=%q\n", c.key, c.new)
+		case "-":
+			fmt.Printf("- %s=%q\n", c.key, c.old)
+		case "~":
+			fmt.Printf("~ %s: %q -> %q\n", c.key, c.old, c.new)
+		}
 	}
 }

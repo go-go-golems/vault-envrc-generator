@@ -49,6 +49,12 @@ sets:
       ca_cert: /etc/ssl/certs/ca-bundle.pem
       server_cert: ~/.ssl/server.crt
       server_key: ~/.ssl/server.key
+
+  # Seed STYTCH Management API credentials into shared namespace
+  - path: /secrets/shared/stytch/management
+    env:
+      key_id: STYTCH_MANAGEMENT_API_KEY_ID
+      secret: STYTCH_MANAGEMENT_API_SECRET
 ```
 
 #### base_path (string, optional)

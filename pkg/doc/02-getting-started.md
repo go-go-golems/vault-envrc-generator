@@ -434,6 +434,9 @@ For details and complete references:
 vault-envrc-generator help yaml-configuration-reference   # batch YAML
 vault-envrc-generator help seed-configuration-guide       # seed YAML
 vault-envrc-generator help vault-envrc-architecture       # internals
+vault-envrc-generator help workflow-walkthrough           # end-to-end tutorial
+vault-envrc-generator help diff-env                       # env vs Vault diff
+vault-envrc-generator help validate                       # seed/batch validator
 ```
 
 ## Troubleshooting Common Issues

@@ -271,4 +271,9 @@ Ready to transform your secret management workflow? Here's your path forward:
    glaze help vault-envrc-architecture
    ```
 
+4. **End-to-End Walkthrough**: Follow a complete workflow
+   ```
+   glaze help workflow-walkthrough
+   ```
+
 The Vault Envrc Generator transforms secret management from a manual, error-prone process into a reliable, automated workflow that scales with your applications and infrastructure. Whether you're managing secrets for a single application or orchestrating complex multi-environment deployments, this tool provides the foundation for consistent, secure secret management.

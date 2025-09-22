@@ -1,6 +1,6 @@
 ---
 Title: Architecture Overview — Vault Envrc Generator
-Slug: architecture
+Slug: vault-envrc-architecture
 Short: Deep dive into the system architecture, design patterns, and component interactions
 Topics:
 - architecture

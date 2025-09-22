@@ -225,3 +225,5 @@ const SecretViewer: React.FC<SecretViewerProps> = ({ secretPath, onClose }) => {
 }
 
 export default SecretViewer
+
+

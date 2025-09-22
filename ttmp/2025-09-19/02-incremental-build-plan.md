@@ -104,6 +104,7 @@ Risks/Mitigations
 - [x] **Tree Depth & Lazy Loading**: Initial implementation loads everything at depth=0, causing performance issues. Fixed by implementing on-demand subdirectory fetching: clicking folder nodes calls `/api/v1/vault/list/{path}` to fetch immediate children only. This improves performance and user experience.
 - [x] **Empty Path Error**: Backend vault list handler rejected empty paths with "missing path" error. Fixed by removing the empty path validation in `pkg/webserver/vault_handlers.go` line 48-51, allowing root directory listing with empty path parameter.
 
+
 ---
 
 Stage 3 — Single-path generation (envrc/json/yaml)
@@ -154,6 +155,7 @@ Backend
   - [x] For json/yaml: return merged object(s) per output path.
 
 Frontend
+k
 - [ ] Textarea/upload for YAML; show result tabs per output path; copy/download.
 
 Acceptance

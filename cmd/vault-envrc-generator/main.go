@@ -92,6 +92,14 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if ssc, err := appcmds.NewSearchCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(ssc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	if lc, err := appcmds.NewListCommand(); err == nil {
 		cmd, err := cli.BuildCobraCommand(lc, opts...)
 		cobra.CheckErr(err)

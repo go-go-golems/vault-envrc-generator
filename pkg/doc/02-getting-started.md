@@ -413,6 +413,10 @@ sets:
     files:
       ca_cert: ~/.ssl/ca.pem
       server_key: ~/.ssl/localhost.key
+  - path: /secrets/shared/stytch/management
+    env:
+      key_id: STYTCH_MANAGEMENT_API_KEY_ID
+      secret: STYTCH_MANAGEMENT_API_SECRET
 ```
 
 Dry run, then seed:

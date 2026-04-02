@@ -64,6 +64,14 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if ssc, err := appcmds.NewSearchCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(ssc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	if lc, err := appcmds.NewListCommand(); err == nil {
 		cmd, err := cli.BuildCobraCommand(lc, opts...)
 		cobra.CheckErr(err)
@@ -104,8 +112,24 @@ func main() {
 		cobra.CheckErr(err)
 	}
 
+	if ac, err := appcmds.NewAnalyzeEnvCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(ac, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
 	if rtc, err := appcmds.NewRmTreeCommand(); err == nil {
 		cmd, err := cli.BuildCobraCommand(rtc, opts...)
+		cobra.CheckErr(err)
+		rootCmd.AddCommand(cmd)
+	} else {
+		cobra.CheckErr(err)
+	}
+
+	if dc, err := appcmds.NewDiffEnvCommand(); err == nil {
+		cmd, err := cli.BuildCobraCommand(dc, opts...)
 		cobra.CheckErr(err)
 		rootCmd.AddCommand(cmd)
 	} else {

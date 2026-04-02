@@ -36,19 +36,6 @@ sudo mv vault-envrc-generator /usr/local/bin/
 vault-envrc-generator --version
 ```
 
-### Package Managers
-
-**Homebrew (macOS/Linux):**
-```bash
-brew install go-go-golems/tap/vault-envrc-generator
-```
-
-**Debian/Ubuntu:**
-```bash
-curl -s https://packagecloud.io/install/repositories/go-go-golems/main/script.deb.sh | sudo bash
-sudo apt-get install vault-envrc-generator
-```
-
 ### Go Install
 
 ```bash

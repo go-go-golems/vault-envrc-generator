@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/go-go-golems/vault-envrc-generator/pkg/cmdutil"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/seed"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
@@ -26,6 +27,8 @@ type SeedCommand struct{ *gcmds.CommandDescription }
 type SeedSettings struct {
 	Config    string   `glazed:"config"`
 	DryRun    bool     `glazed:"dry-run"`
+	Diff      bool     `glazed:"diff"`
+	Confirm   bool     `glazed:"confirm"`
 	BasePath  string   `glazed:"base-path"`
 	Sets      []string `glazed:"sets"`
 	Force     bool     `glazed:"force"`
@@ -46,6 +49,8 @@ func NewSeedCommand() (*SeedCommand, error) {
 		gcmds.WithFlags(
 			fields.New("config", fields.TypeString, fields.WithRequired(true), fields.WithHelp("Seed YAML file"), fields.WithShortFlag("c")),
 			fields.New("dry-run", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Preview without writing to Vault")),
+			fields.New("diff", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Show a diff vs existing secrets (implied by --dry-run)")),
+			fields.New("confirm", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Ask for confirmation after showing diff before applying")),
 			fields.New("base-path", fields.TypeString, fields.WithHelp("Override base_path (supports Go templates)")),
 			fields.New("sets", fields.TypeStringList, fields.WithHelp("Only seed sets whose path matches any of these; default all")),
 			fields.New("force", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Overwrite existing keys without prompting")),
@@ -102,30 +107,7 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *values.Values) error {
 	}
 
 	// Filter sets if requested (match by name or path) and ignoring empty selectors
-	if len(s.Sets) > 0 {
-		allowed := map[string]struct{}{}
-		for _, p := range s.Sets {
-			if p == "" {
-				continue
-			}
-			allowed[p] = struct{}{}
-		}
-		if len(allowed) > 0 {
-			filtered := make([]seed.Set, 0, len(spec.Sets))
-			for _, st := range spec.Sets {
-				if _, ok := allowed[st.Path]; ok {
-					filtered = append(filtered, st)
-					continue
-				}
-				if st.Name != "" {
-					if _, ok := allowed[st.Name]; ok {
-						filtered = append(filtered, st)
-					}
-				}
-			}
-			spec.Sets = filtered
-		}
-	}
+	spec.Sets = cmdutil.FilterItems(spec.Sets, s.Sets, func(st seed.Set) string { return st.Path }, func(st seed.Set) string { return st.Name })
 
 	// Build extra template data from flags
 	extra := map[string]interface{}{}
@@ -161,7 +143,14 @@ func (c *SeedCommand) Run(ctx context.Context, parsed *values.Values) error {
 		}
 	}
 
-	return seed.Run(client, &spec, seed.Options{DryRun: s.DryRun, ForceOverwrite: s.Force, AllowCommands: s.AllowCmd, ExtraTemplateData: extra})
+	return seed.Run(client, &spec, seed.Options{
+		DryRun:            s.DryRun,
+		ForceOverwrite:    s.Force,
+		AllowCommands:     s.AllowCmd,
+		ExtraTemplateData: extra,
+		ShowDiff:          s.Diff || s.DryRun,
+		ConfirmApply:      s.Confirm,
+	})
 }
 
 var _ gcmds.BareCommand = &SeedCommand{}

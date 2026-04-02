@@ -21,6 +21,8 @@ type Options struct {
 	ForceOverwrite    bool
 	AllowCommands     bool
 	ExtraTemplateData map[string]interface{}
+	ShowDiff          bool
+	ConfirmApply      bool
 }
 
 type userDecision int
@@ -164,85 +166,100 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			tctx.Data[dk] = dv
 		}
 
-		// Run setup_commands: populate tctx.Data but do not persist into data map
+		// Run setup_commands sequentially: populate tctx.Data but do not persist into data map
 		if len(set.SetupCommands) > 0 {
-			executed := map[string]bool{}
-			keys := make([]string, 0, len(set.SetupCommands))
-			for k := range set.SetupCommands {
-				keys = append(keys, k)
-			}
-			// Attempt multiple passes to satisfy dependencies
-			for pass := 0; pass < len(keys); pass++ {
-				progress := false
-				for _, k := range keys {
-					if executed[k] {
-						continue
+			for idx, sc := range set.SetupCommands {
+				name := strings.TrimSpace(sc.Name)
+				outputKey := strings.TrimSpace(sc.OutputKey)
+				shouldStoreOutput := storeSetupCommandOutput(outputKey)
+				if name == "" {
+					if shouldStoreOutput {
+						name = outputKey
+					} else {
+						name = fmt.Sprintf("setup[%d]", idx+1)
 					}
-					command := set.SetupCommands[k]
-					cmdStr, err := vault.RenderTemplateString(command, tctx)
-					if err != nil {
-						// Defer if missing .Data dependency
-						if isMissingDataKeyError(err) {
-							continue
+				}
+				cmdTemplate := sc.Command
+				if strings.TrimSpace(cmdTemplate) == "" {
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				cmdStr, err := vault.RenderTemplateString(cmdTemplate, tctx)
+				if err != nil {
+					if opts.DryRun && isMissingDataKeyError(err) {
+						logger := log.Debug().Str("name", name).Str("path", renderedTarget)
+						if sc.Description != "" {
+							logger = logger.Str("description", sc.Description)
 						}
-						return fmt.Errorf("set %d: failed to render setup command '%s': %w", i+1, k, err)
-					}
-					if strings.TrimSpace(cmdStr) == "" {
-						executed[k] = true
-						progress = true
-						continue
-					}
-					if opts.DryRun {
-						log.Debug().Str("key", k).Str("path", renderedTarget).Msg("seed: dry-run setup command")
-						executed[k] = true
-						progress = true
-						continue
-					}
-					if !opts.AllowCommands {
-						if commandAllSkip {
-							executed[k] = true
-							progress = true
-							continue
+						logger.Msg("seed: dry-run skipped setup command (missing data)")
+						if shouldStoreOutput {
+							tctx.Data[outputKey] = ""
 						}
-						if !commandAllRun {
-							escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\`, `\\`)
-							escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
-							prompt := fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", k, escapedRenderedTarget, cmdStr)
-							dec := askForDecision(prompt)
-							switch dec {
-							case decYes:
-								// proceed
-							case decAllYes:
-								commandAllRun = true
-							case decAllNo:
-								commandAllSkip = true
-								fallthrough
-							case decNo:
-								executed[k] = true
-								progress = true
-								continue
+						continue
+					}
+					return fmt.Errorf("set %d: failed to render setup command '%s': %w", i+1, name, err)
+				}
+				if strings.TrimSpace(cmdStr) == "" {
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				if opts.DryRun {
+					logger := log.Debug().Str("name", name).Str("path", renderedTarget)
+					if sc.Description != "" {
+						logger = logger.Str("description", sc.Description)
+					}
+					logger.Msg("seed: dry-run setup command")
+					if shouldStoreOutput {
+						tctx.Data[outputKey] = ""
+					}
+					continue
+				}
+				if !opts.AllowCommands {
+					if commandAllSkip {
+						if shouldStoreOutput {
+							tctx.Data[outputKey] = ""
+						}
+						continue
+					}
+					if !commandAllRun {
+						escapedRenderedTarget := strings.ReplaceAll(renderedTarget, `\\`, `\\\\`)
+						escapedRenderedTarget = strings.ReplaceAll(escapedRenderedTarget, "'", "\\'")
+						promptParts := []string{fmt.Sprintf("Run setup command '%s' at '%s'? [y/N/a/s]: %s ", name, escapedRenderedTarget, cmdStr)}
+						if sc.Description != "" {
+							promptParts = append(promptParts, fmt.Sprintf("# %s", sc.Description))
+						}
+						prompt := strings.Join(promptParts, " ")
+						dec := askForDecision(prompt)
+						switch dec {
+						case decYes:
+							// proceed
+						case decAllYes:
+							commandAllRun = true
+						case decAllNo:
+							commandAllSkip = true
+							if shouldStoreOutput {
+								tctx.Data[outputKey] = ""
 							}
+							continue
+						case decNo:
+							if shouldStoreOutput {
+								tctx.Data[outputKey] = ""
+							}
+							continue
 						}
 					}
-					out, err := runShellCommand(cmdStr)
-					if err != nil {
-						return fmt.Errorf("set %d: setup command '%s' failed: %w", i+1, k, err)
-					}
-					val := strings.TrimSpace(out)
-					if val != "" {
-						tctx.Data[k] = val
-					}
-					executed[k] = true
-					progress = true
 				}
-				if !progress {
-					break
+				out, err := runShellCommand(cmdStr)
+				if err != nil {
+					return fmt.Errorf("set %d: setup command '%s' failed: %w", i+1, name, err)
 				}
-			}
-			// Verify all executed
-			for _, k := range keys {
-				if !executed[k] {
-					return fmt.Errorf("set %d: unsatisfied setup command dependencies; could not render '%s'", i+1, k)
+				val := strings.TrimSpace(out)
+				if shouldStoreOutput {
+					tctx.Data[outputKey] = val
 				}
 			}
 		}
@@ -259,6 +276,10 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 				command := set.Commands[k]
 				cmdStr, err := vault.RenderTemplateString(command, tctx)
 				if err != nil {
+					if opts.DryRun && isMissingDataKeyError(err) {
+						data[k] = fmt.Sprintf("<command: %s>", command)
+						continue
+					}
 					return fmt.Errorf("set %d: failed to render command for key '%s': %w", i+1, k, err)
 				}
 				if strings.TrimSpace(cmdStr) == "" {
@@ -322,9 +343,26 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 			continue
 		}
 
+		// Compute and optionally print diff vs existing secrets
+		var existing map[string]interface{}
+		existing, _ = client.GetSecrets(renderedTarget)
+		if opts.DryRun || opts.ShowDiff {
+			printDiff(renderedTarget, existing, data)
+		}
+
+		// If dry-run, do not write
 		if opts.DryRun {
-			log.Debug().Str("path", renderedTarget).Interface("keys", keysOf(data)).Msg("seed: dry-run put")
 			continue
+		}
+
+		// Ask for a confirmation per path after diff if requested
+		if opts.ConfirmApply {
+			prompt := fmt.Sprintf("Apply changes to '%s'? [y/N]: ", renderedTarget)
+			dec := askForDecision(prompt)
+			if dec != decYes && dec != decAllYes {
+				log.Debug().Str("path", renderedTarget).Msg("seed: user declined apply")
+				continue
+			}
 		}
 
 		// Handle overwrite confirmations when existing values are present
@@ -336,6 +374,12 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 					return fmt.Errorf("failed to check existing secrets at %s: %w", renderedTarget, err)
 				}
 			} else if len(existing) > 0 {
+				// Remove unchanged keys to avoid redundant writes
+				for k, v := range data {
+					if old, ok := existing[k]; ok && convertToString(old) == convertToString(v) {
+						delete(data, k)
+					}
+				}
 				for key := range data {
 					if _, ok := existing[key]; ok {
 						if overwriteAllSkip {
@@ -417,12 +461,17 @@ func Run(client *vault.Client, spec *Spec, opts Options) error {
 	return nil
 }
 
-func keysOf(m map[string]interface{}) []string {
-	ks := make([]string, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
+func storeSetupCommandOutput(key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
 	}
-	return ks
+	switch strings.ToLower(key) {
+	case "_ignored", "_ignore", "_", "-":
+		return false
+	default:
+		return true
+	}
 }
 
 // askForDecision prompts the user for y/N/a/s and returns a decision
@@ -608,5 +657,46 @@ func convertToString(value interface{}) string {
 			return string(data)
 		}
 		return fmt.Sprintf("%v", value)
+	}
+}
+
+// printDiff renders a simple key-level diff between existing and desired data
+func printDiff(path string, existing map[string]interface{}, desired map[string]interface{}) {
+	type change struct{ key, op, old, new string }
+	changes := []change{}
+	// Deletions (existing but not desired)
+	for k, v := range existing {
+		if _, ok := desired[k]; !ok {
+			changes = append(changes, change{key: k, op: "-", old: convertToString(v), new: ""})
+		}
+	}
+	// Additions and updates
+	for k, v := range desired {
+		nv := convertToString(v)
+		if ov, ok := existing[k]; ok {
+			ovs := convertToString(ov)
+			if ovs != nv {
+				changes = append(changes, change{key: k, op: "~", old: ovs, new: nv})
+			}
+		} else {
+			changes = append(changes, change{key: k, op: "+", old: "", new: nv})
+		}
+	}
+	if len(changes) == 0 {
+		log.Info().Str("path", path).Msg("seed: no changes (up to date)")
+		return
+	}
+	log.Info().Str("path", path).Int("changes", len(changes)).Msg("seed: diff")
+	// Stable ordering
+	sort.Slice(changes, func(i, j int) bool { return changes[i].key < changes[j].key })
+	for _, c := range changes {
+		switch c.op {
+		case "+":
+			fmt.Printf("+ %s=%q\n", c.key, c.new)
+		case "-":
+			fmt.Printf("- %s=%q\n", c.key, c.old)
+		case "~":
+			fmt.Printf("~ %s: %q -> %q\n", c.key, c.old, c.new)
+		}
 	}
 }

@@ -74,5 +74,9 @@ func main() {
 	if err := parsed.DecodeSectionInto(schema.DefaultSlug, &s); err != nil {
 		panic(err)
 	}
-	fmt.Printf("api-key: %s\n", s.ApiKey)
+	if s.ApiKey != "" {
+		fmt.Println("api-key retrieved successfully")
+	} else {
+		fmt.Println("api-key not set")
+	}
 }

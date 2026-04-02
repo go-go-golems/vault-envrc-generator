@@ -8,20 +8,28 @@ func IsAbsoluteVaultPath(p string) bool {
 
 func JoinBaseAndPath(basePath, p string) string {
 	if basePath == "" || IsAbsoluteVaultPath(p) {
-		return p
+		return normalizeSlashes(p)
 	}
 	bp := strings.TrimSuffix(basePath, "/")
 	pp := strings.TrimPrefix(p, "/")
-	return bp + "/" + pp
+	return normalizeSlashes(bp + "/" + pp)
 }
 
 func NormalizeListPath(p string) string {
-	p = strings.TrimSpace(p)
+	p = normalizeSlashes(strings.TrimSpace(p))
 	if p == "" {
 		return p
 	}
 	if !strings.HasSuffix(p, "/") {
 		return p + "/"
+	}
+	return p
+}
+
+// normalizeSlashes collapses multiple slashes into a single slash
+func normalizeSlashes(p string) string {
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
 	}
 	return p
 }

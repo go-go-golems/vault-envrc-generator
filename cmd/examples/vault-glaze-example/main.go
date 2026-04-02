@@ -1,15 +1,16 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
 	"github.com/go-go-golems/glazed/pkg/cli"
-	"github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/middlewares"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"strings"
+
+	"github.com/go-go-golems/glazed/pkg/cmds/sources"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 
 	vglazed "github.com/go-go-golems/vault-envrc-generator/pkg/glazed"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
@@ -17,60 +18,60 @@ import (
 
 type ExampleSettings struct {
 	// This will be set from Vault if a key with the same name exists
-	ApiKey string `glazed.parameter:"api-key"`
+	ApiKey string `glazed:"api-key"`
 }
 
 func main() {
-	// Define layers: command settings + vault + default app layer
-	cs, err := cli.NewCommandSettingsLayer()
+	// Define sections: command settings + vault + default app section
+	cs, err := cli.NewCommandSettingsSection()
 	if err != nil {
 		panic(err)
 	}
-	appLayer, err := glayers.NewParameterLayer(
-		glayers.DefaultSlug,
+	appSection, err := schema.NewSection(
+		schema.DefaultSlug,
 		"Example App Settings",
-		glayers.WithParameterDefinitions(
-			parameters.NewParameterDefinition("api-key", parameters.ParameterTypeString, parameters.WithHelp("API key (populated from Vault)")),
+		schema.WithFields(
+			fields.New("api-key", fields.TypeString, fields.WithHelp("API key (populated from Vault)")),
 		),
 	)
 	if err != nil {
 		panic(err)
 	}
-	vaultLayer, err := vaultlayer.NewVaultLayer()
+	vaultSection, err := vaultlayer.NewVaultSection()
 	if err != nil {
 		panic(err)
 	}
-	pls := glayers.NewParameterLayers(glayers.WithLayers(cs, vaultLayer, appLayer))
-	parsed := glayers.NewParsedLayers()
+	pls := schema.NewSchema(schema.WithSections(cs, vaultSection, appSection))
+	parsed := values.New()
 
-	// Simple middleware chain demonstrating vault bootstrap and UpdateFromVault
-	mw := []middlewares.Middleware{
+	// Middleware chain demonstrating vault bootstrap and UpdateFromVault
+	mw := []sources.Middleware{
 		// Basic CLI collection (flags/args) – first so they get highest precedence later
-		middlewares.ParseFromCobraCommand(nil, parameters.WithParseStepSource("flags")),
-		middlewares.GatherArguments(os.Args[1:], parameters.WithParseStepSource("args")),
+		sources.FromCobra(nil, fields.WithSource("flags")),
+		sources.FromArgs(os.Args[1:], fields.WithSource("args")),
 
-		// 1) Bootstrap ONLY the vault layer
-		middlewares.WrapWithWhitelistedLayers(
+		// 1) Bootstrap ONLY the vault section with defaults + env
+		sources.WrapWithWhitelistedSections(
 			[]string{vaultlayer.VaultLayerSlug},
-			middlewares.SetFromDefaults(parameters.WithParseStepSource("defaults")),
-			middlewares.GatherFlagsFromViper(parameters.WithParseStepSource("viper")),
+			sources.FromDefaults(fields.WithSource("defaults")),
+			sources.FromEnv(strings.ToUpper("vault_envrc_generator"), fields.WithSource("env")),
 		),
 
-		// 2) Load values from Vault into parameters across layers
-		vglazed.UpdateFromVault("kv/example/app", parameters.WithParseStepSource("vault")),
+		// 2) Load values from Vault into fields across sections
+		vglazed.UpdateFromVault("kv/example/app", fields.WithSource("vault")),
 
-		// 3) Normal middlewares for all layers
-		middlewares.GatherFlagsFromViper(parameters.WithParseStepSource("viper")),
-		middlewares.SetFromDefaults(parameters.WithParseStepSource("defaults")),
+		// 3) Normal sources for all sections
+		sources.FromEnv(strings.ToUpper("vault_envrc_generator"), fields.WithSource("env")),
+		sources.FromDefaults(fields.WithSource("defaults")),
 	}
 
-	if err := middlewares.ExecuteMiddlewares(pls, parsed, mw...); err != nil {
+	if err := sources.Execute(pls, parsed, mw...); err != nil {
 		panic(err)
 	}
 
 	// Show result
 	var s ExampleSettings
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, &s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, &s); err != nil {
 		panic(err)
 	}
 	if s.ApiKey != "" {
@@ -78,8 +79,4 @@ func main() {
 	} else {
 		fmt.Println("api-key not set")
 	}
-
-	// Prevent unused imports if running as a simple example
-	_ = context.Background()
-	_ = cmds.NewCommandDescription
 }

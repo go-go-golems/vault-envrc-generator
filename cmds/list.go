@@ -10,8 +10,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/settings"
 	"github.com/go-go-golems/glazed/pkg/types"
@@ -24,21 +25,21 @@ import (
 type ListCommand struct{ *gcmds.CommandDescription }
 
 type ListSettings struct {
-	Path          string `glazed.parameter:"path"`
-	Depth         int    `glazed.parameter:"depth"`
-	Prefix        string `glazed.parameter:"prefix"`
-	Format        string `glazed.parameter:"format"`
-	IncludeValues bool   `glazed.parameter:"include-values"`
-	Censor        string `glazed.parameter:"censor"`
+	Path          string `glazed:"path"`
+	Depth         int    `glazed:"depth"`
+	Prefix        string `glazed:"prefix"`
+	Format        string `glazed:"format"`
+	IncludeValues bool   `glazed:"include-values"`
+	Censor        string `glazed:"censor"`
 }
 
 func NewListCommand() (*ListCommand, error) {
-	// Glazed output layers for structured output
-	glazedLayers, err := settings.NewGlazedParameterLayers()
+	// Glazed output sections for structured output
+	glazedSection, err := settings.NewGlazedSection()
 	if err != nil {
 		return nil, err
 	}
-	commandLayer, err := glzcli.NewCommandSettingsLayer()
+	commandSection, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -46,16 +47,16 @@ func NewListCommand() (*ListCommand, error) {
 		"list",
 		gcmds.WithShort("List accessible secrets and directories under a Vault path"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("p"), parameters.WithHelp("Vault path to list")),
-			parameters.NewParameterDefinition("depth", parameters.ParameterTypeInteger, parameters.WithDefault(1), parameters.WithHelp("Depth to recurse (0 = unlimited)")),
-			parameters.NewParameterDefinition("prefix", parameters.ParameterTypeString, parameters.WithHelp("Only show entries starting with this prefix")),
-			parameters.NewParameterDefinition("format", parameters.ParameterTypeChoice, parameters.WithChoices("yaml", "text"), parameters.WithDefault("yaml"), parameters.WithHelp("Output format")),
-			parameters.NewParameterDefinition("include-values", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Include censored values (yaml only)")),
-			parameters.NewParameterDefinition("censor", parameters.ParameterTypeString, parameters.WithDefault("****"), parameters.WithHelp("String used for censored values")),
+			fields.New("path", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("p"), fields.WithHelp("Vault path to list")),
+			fields.New("depth", fields.TypeInteger, fields.WithDefault(1), fields.WithHelp("Depth to recurse (0 = unlimited)")),
+			fields.New("prefix", fields.TypeString, fields.WithHelp("Only show entries starting with this prefix")),
+			fields.New("format", fields.TypeChoice, fields.WithChoices("yaml", "text"), fields.WithDefault("yaml"), fields.WithHelp("Output format")),
+			fields.New("include-values", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Include censored values (yaml only)")),
+			fields.New("censor", fields.TypeString, fields.WithDefault("****"), fields.WithHelp("String used for censored values")),
 		),
-		gcmds.WithLayersList(glazedLayers, commandLayer),
+		gcmds.WithSections(glazedSection, commandSection),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +64,9 @@ func NewListCommand() (*ListCommand, error) {
 }
 
 // GlazeCommand: output structured rows
-func (c *ListCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *glayers.ParsedLayers, gp middlewares.Processor) error {
+func (c *ListCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *values.Values, gp middlewares.Processor) error {
 	s := &ListSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

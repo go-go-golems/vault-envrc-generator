@@ -11,8 +11,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/envrc"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
@@ -23,11 +24,11 @@ import (
 type InteractiveCommand struct{ *gcmds.CommandDescription }
 
 type InteractiveSettings struct {
-	Path string `glazed.parameter:"path"`
+	Path string `glazed:"path"`
 }
 
 func NewInteractiveCommand() (*InteractiveCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -35,20 +36,20 @@ func NewInteractiveCommand() (*InteractiveCommand, error) {
 		"interactive",
 		gcmds.WithShort("Interactive mode to preview and write .envrc/json/yaml"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithHelp("Vault path to fetch (prompt if empty)")),
+			fields.New("path", fields.TypeString, fields.WithHelp("Vault path to fetch (prompt if empty)")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &InteractiveCommand{cd}, nil
 }
 
-func (c *InteractiveCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *InteractiveCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &InteractiveSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

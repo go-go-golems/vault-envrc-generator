@@ -7,8 +7,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/settings"
 	"github.com/go-go-golems/glazed/pkg/types"
@@ -21,16 +22,16 @@ import (
 type ValidateCommand struct{ *gcmds.CommandDescription }
 
 type ValidateSettings struct {
-	SeedConfig  string `glazed.parameter:"seed-config"`
-	BatchConfig string `glazed.parameter:"batch-config"`
+	SeedConfig  string `glazed:"seed-config"`
+	BatchConfig string `glazed:"batch-config"`
 }
 
 func NewValidateCommand() (*ValidateCommand, error) {
-	glazedLayers, err := settings.NewGlazedParameterLayers()
+	glazedSection, err := settings.NewGlazedSection()
 	if err != nil {
 		return nil, err
 	}
-	commandLayer, err := glzcli.NewCommandSettingsLayer()
+	commandSection, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -38,17 +39,17 @@ func NewValidateCommand() (*ValidateCommand, error) {
 		"validate",
 		gcmds.WithShort("Validate seed env vars and cross-check with batch requirements"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("seed-config", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("s"), parameters.WithHelp("Path to seed YAML config")),
-			parameters.NewParameterDefinition("batch-config", parameters.ParameterTypeString, parameters.WithShortFlag("b"), parameters.WithHelp("Path to batch YAML config (optional)")),
+			fields.New("seed-config", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("s"), fields.WithHelp("Path to seed YAML config")),
+			fields.New("batch-config", fields.TypeString, fields.WithShortFlag("b"), fields.WithHelp("Path to batch YAML config (optional)")),
 		),
-		gcmds.WithLayersList(glazedLayers, commandLayer),
+		gcmds.WithSections(glazedSection, commandSection),
 	)
 	return &ValidateCommand{cd}, nil
 }
 
-func (c *ValidateCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *glayers.ParsedLayers, gp middlewares.Processor) error {
+func (c *ValidateCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *values.Values, gp middlewares.Processor) error {
 	s := &ValidateSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 

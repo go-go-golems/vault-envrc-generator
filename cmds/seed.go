@@ -10,8 +10,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
@@ -24,20 +25,20 @@ import (
 type SeedCommand struct{ *gcmds.CommandDescription }
 
 type SeedSettings struct {
-	Config    string   `glazed.parameter:"config"`
-	DryRun    bool     `glazed.parameter:"dry-run"`
-	Diff      bool     `glazed.parameter:"diff"`
-	Confirm   bool     `glazed.parameter:"confirm"`
-	BasePath  string   `glazed.parameter:"base-path"`
-	Sets      []string `glazed.parameter:"sets"`
-	Force     bool     `glazed.parameter:"force"`
-	AllowCmd  bool     `glazed.parameter:"allow-commands"`
-	ExtraKV   []string `glazed.parameter:"extra"`
-	ExtraFile string   `glazed.parameter:"extra-file"`
+	Config    string   `glazed:"config"`
+	DryRun    bool     `glazed:"dry-run"`
+	Diff      bool     `glazed:"diff"`
+	Confirm   bool     `glazed:"confirm"`
+	BasePath  string   `glazed:"base-path"`
+	Sets      []string `glazed:"sets"`
+	Force     bool     `glazed:"force"`
+	AllowCmd  bool     `glazed:"allow-commands"`
+	ExtraKV   []string `glazed:"extra"`
+	ExtraFile string   `glazed:"extra-file"`
 }
 
 func NewSeedCommand() (*SeedCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -46,29 +47,29 @@ func NewSeedCommand() (*SeedCommand, error) {
 		"seed",
 		gcmds.WithShort("Seed Vault from env/files via YAML spec"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("config", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithHelp("Seed YAML file"), parameters.WithShortFlag("c")),
-			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Preview without writing to Vault")),
-			parameters.NewParameterDefinition("diff", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Show a diff vs existing secrets (implied by --dry-run)")),
-			parameters.NewParameterDefinition("confirm", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Ask for confirmation after showing diff before applying")),
-			parameters.NewParameterDefinition("base-path", parameters.ParameterTypeString, parameters.WithHelp("Override base_path (supports Go templates)")),
-			parameters.NewParameterDefinition("sets", parameters.ParameterTypeStringList, parameters.WithHelp("Only seed sets whose path matches any of these; default all")),
-			parameters.NewParameterDefinition("force", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite existing keys without prompting")),
-			parameters.NewParameterDefinition("allow-commands", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Run commands in spec without confirmation")),
-			parameters.NewParameterDefinition("extra", parameters.ParameterTypeStringList, parameters.WithHelp("Additional template data key=value pairs")),
-			parameters.NewParameterDefinition("extra-file", parameters.ParameterTypeString, parameters.WithHelp("YAML or JSON file with additional template data")),
+			fields.New("config", fields.TypeString, fields.WithRequired(true), fields.WithHelp("Seed YAML file"), fields.WithShortFlag("c")),
+			fields.New("dry-run", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Preview without writing to Vault")),
+			fields.New("diff", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Show a diff vs existing secrets (implied by --dry-run)")),
+			fields.New("confirm", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Ask for confirmation after showing diff before applying")),
+			fields.New("base-path", fields.TypeString, fields.WithHelp("Override base_path (supports Go templates)")),
+			fields.New("sets", fields.TypeStringList, fields.WithHelp("Only seed sets whose path matches any of these; default all")),
+			fields.New("force", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Overwrite existing keys without prompting")),
+			fields.New("allow-commands", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Run commands in spec without confirmation")),
+			fields.New("extra", fields.TypeStringList, fields.WithHelp("Additional template data key=value pairs")),
+			fields.New("extra-file", fields.TypeString, fields.WithHelp("YAML or JSON file with additional template data")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &SeedCommand{cd}, nil
 }
 
-func (c *SeedCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *SeedCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &SeedSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	// Allow overriding base_path via CLI flag

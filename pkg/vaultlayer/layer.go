@@ -4,68 +4,69 @@ import (
 	"fmt"
 
 	glzcms "github.com/go-go-golems/glazed/pkg/cmds"
-	glzlayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 )
 
 const VaultLayerSlug = "vault"
 
 type VaultSettings struct {
-	VaultAddr        string `glazed.parameter:"vault-addr"`
-	VaultToken       string `glazed.parameter:"vault-token"`
-	VaultTokenSource string `glazed.parameter:"vault-token-source"`
-	VaultTokenFile   string `glazed.parameter:"vault-token-file"`
+	VaultAddr        string `glazed:"vault-addr"`
+	VaultToken       string `glazed:"vault-token"`
+	VaultTokenSource string `glazed:"vault-token-source"`
+	VaultTokenFile   string `glazed:"vault-token-file"`
 }
 
-// NewVaultLayer defines a reusable parameter layer for Vault configuration.
-func NewVaultLayer() (glzlayers.ParameterLayer, error) {
-	return glzlayers.NewParameterLayer(
+// NewVaultSection defines a reusable section for Vault configuration.
+func NewVaultSection() (schema.Section, error) {
+	return schema.NewSection(
 		VaultLayerSlug,
 		"Vault connection settings",
-		glzlayers.WithParameterDefinitions(
-			parameters.NewParameterDefinition(
+		schema.WithFields(
+			fields.New(
 				"vault-addr",
-				parameters.ParameterTypeString,
-				parameters.WithHelp("Vault server address"),
-				parameters.WithDefault("http://127.0.0.1:8200"),
+				fields.TypeString,
+				fields.WithHelp("Vault server address"),
+				fields.WithDefault("http://127.0.0.1:8200"),
 			),
-			parameters.NewParameterDefinition(
+			fields.New(
 				"vault-token",
-				parameters.ParameterTypeString,
-				parameters.WithHelp("Vault token (optional)"),
-				parameters.WithDefault(""),
+				fields.TypeString,
+				fields.WithHelp("Vault token (optional)"),
+				fields.WithDefault(""),
 			),
-			parameters.NewParameterDefinition(
+			fields.New(
 				"vault-token-source",
-				parameters.ParameterTypeChoice,
-				parameters.WithHelp("Token source: auto|env|file|lookup"),
-				parameters.WithDefault("auto"),
-				parameters.WithChoices("auto", "env", "file", "lookup"),
+				fields.TypeChoice,
+				fields.WithHelp("Token source: auto|env|file|lookup"),
+				fields.WithDefault("auto"),
+				fields.WithChoices("auto", "env", "file", "lookup"),
 			),
-			parameters.NewParameterDefinition(
+			fields.New(
 				"vault-token-file",
-				parameters.ParameterTypeString,
-				parameters.WithHelp("Path to token file (default ~/.vault-token)"),
-				parameters.WithDefault(""),
+				fields.TypeString,
+				fields.WithHelp("Path to token file (default ~/.vault-token)"),
+				fields.WithDefault(""),
 			),
 		),
 	)
 }
 
-// AddVaultLayerToCommand attaches the layer to a Glazed command description.
-func AddVaultLayerToCommand(c glzcms.Command) (glzcms.Command, error) {
-	l, err := NewVaultLayer()
+// AddVaultSectionToCommand attaches the vault section to a Glazed command description.
+func AddVaultSectionToCommand(c glzcms.Command) (glzcms.Command, error) {
+	s, err := NewVaultSection()
 	if err != nil {
 		return nil, err
 	}
-	c.Description().Layers.Set(VaultLayerSlug, l)
+	c.Description().Schema.Set(VaultLayerSlug, s)
 	return c, nil
 }
 
-// GetVaultSettings returns parsed vault settings from the ParsedLayers.
-func GetVaultSettings(parsed *glzlayers.ParsedLayers) (*VaultSettings, error) {
+// GetVaultSettings returns parsed vault settings from the Values.
+func GetVaultSettings(parsed *values.Values) (*VaultSettings, error) {
 	var s VaultSettings
-	if err := parsed.InitializeStruct(VaultLayerSlug, &s); err != nil {
+	if err := parsed.DecodeSectionInto(VaultLayerSlug, &s); err != nil {
 		return nil, fmt.Errorf("failed to parse vault settings: %w", err)
 	}
 	return &s, nil

@@ -9,8 +9,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"gopkg.in/yaml.v3"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
@@ -20,15 +21,15 @@ import (
 type TreeCommand struct{ *gcmds.CommandDescription }
 
 type TreeSettings struct {
-	Path         string `glazed.parameter:"path"`
-	Depth        int    `glazed.parameter:"depth"`
-	Reveal       bool   `glazed.parameter:"reveal-values"`
-	CensorPrefix int    `glazed.parameter:"censor-prefix"`
-	CensorSuffix int    `glazed.parameter:"censor-suffix"`
+	Path         string `glazed:"path"`
+	Depth        int    `glazed:"depth"`
+	Reveal       bool   `glazed:"reveal-values"`
+	CensorPrefix int    `glazed:"censor-prefix"`
+	CensorSuffix int    `glazed:"censor-suffix"`
 }
 
 func NewTreeCommand() (*TreeCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -36,24 +37,24 @@ func NewTreeCommand() (*TreeCommand, error) {
 		"tree",
 		gcmds.WithShort("Recursively print Vault tree as YAML (censored by default)"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("p"), parameters.WithHelp("Root Vault path (prefix)")),
-			parameters.NewParameterDefinition("depth", parameters.ParameterTypeInteger, parameters.WithDefault(0), parameters.WithHelp("Max depth (0 = unlimited)")),
-			parameters.NewParameterDefinition("reveal-values", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Reveal real values instead of censored")),
-			parameters.NewParameterDefinition("censor-prefix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at start of value when censored")),
-			parameters.NewParameterDefinition("censor-suffix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at end of value when censored")),
+			fields.New("path", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("p"), fields.WithHelp("Root Vault path (prefix)")),
+			fields.New("depth", fields.TypeInteger, fields.WithDefault(0), fields.WithHelp("Max depth (0 = unlimited)")),
+			fields.New("reveal-values", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Reveal real values instead of censored")),
+			fields.New("censor-prefix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at start of value when censored")),
+			fields.New("censor-suffix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at end of value when censored")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &TreeCommand{cd}, nil
 }
 
-func (c *TreeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *TreeCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &TreeSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

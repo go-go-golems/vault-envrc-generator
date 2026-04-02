@@ -8,8 +8,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"gopkg.in/yaml.v3"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/batch"
@@ -21,21 +22,21 @@ import (
 type BatchCommand struct{ *gcmds.CommandDescription }
 
 type BatchSettings struct {
-	Config          string   `glazed.parameter:"config"`
-	OutputOverride  string   `glazed.parameter:"output"`
-	Format          string   `glazed.parameter:"format"`
-	ContinueOnError bool     `glazed.parameter:"continue-on-error"`
-	DryRun          bool     `glazed.parameter:"dry-run"`
-	SortKeys        bool     `glazed.parameter:"sort-keys"`
-	BasePath        string   `glazed.parameter:"base-path"`
-	Jobs            []string `glazed.parameter:"jobs"`
-	Sections        []string `glazed.parameter:"sections"`
-	ForceOverwrite  bool     `glazed.parameter:"force-overwrite"`
-	SkipUnreadable  bool     `glazed.parameter:"skip-unreadable"`
+	Config          string   `glazed:"config"`
+	OutputOverride  string   `glazed:"output"`
+	Format          string   `glazed:"format"`
+	ContinueOnError bool     `glazed:"continue-on-error"`
+	DryRun          bool     `glazed:"dry-run"`
+	SortKeys        bool     `glazed:"sort-keys"`
+	BasePath        string   `glazed:"base-path"`
+	Jobs            []string `glazed:"jobs"`
+	Sections        []string `glazed:"sections"`
+	ForceOverwrite  bool     `glazed:"force-overwrite"`
+	SkipUnreadable  bool     `glazed:"skip-unreadable"`
 }
 
 func NewBatchCommand() (*BatchCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -44,31 +45,31 @@ func NewBatchCommand() (*BatchCommand, error) {
 		"batch",
 		gcmds.WithShort("Process multiple Vault paths from a YAML file"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("config", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithHelp("Batch YAML file"), parameters.WithShortFlag("c")),
-			parameters.NewParameterDefinition("base-path", parameters.ParameterTypeString, parameters.WithHelp("Base Vault path to prepend to relative section paths")),
-			parameters.NewParameterDefinition("output", parameters.ParameterTypeString, parameters.WithHelp("Override output for all jobs; '-' for stdout")),
-			parameters.NewParameterDefinition("format", parameters.ParameterTypeString, parameters.WithHelp("envrc|json|yaml")),
-			parameters.NewParameterDefinition("continue-on-error", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Continue processing on errors")),
-			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Preview outputs without writing files")),
-			parameters.NewParameterDefinition("sort-keys", parameters.ParameterTypeBool, parameters.WithDefault(true), parameters.WithHelp("Sort JSON/YAML keys for deterministic output")),
-			parameters.NewParameterDefinition("jobs", parameters.ParameterTypeStringList, parameters.WithHelp("Only process jobs with these names; default all")),
-			parameters.NewParameterDefinition("sections", parameters.ParameterTypeStringList, parameters.WithHelp("Only process sections with these names; default all")),
-			parameters.NewParameterDefinition("force-overwrite", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Overwrite .envrc without prompting")),
-			parameters.NewParameterDefinition("skip-unreadable", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip sections that cannot be read; warn instead of failing")),
+			fields.New("config", fields.TypeString, fields.WithRequired(true), fields.WithHelp("Batch YAML file"), fields.WithShortFlag("c")),
+			fields.New("base-path", fields.TypeString, fields.WithHelp("Base Vault path to prepend to relative section paths")),
+			fields.New("output", fields.TypeString, fields.WithHelp("Override output for all jobs; '-' for stdout")),
+			fields.New("format", fields.TypeString, fields.WithHelp("envrc|json|yaml")),
+			fields.New("continue-on-error", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Continue processing on errors")),
+			fields.New("dry-run", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Preview outputs without writing files")),
+			fields.New("sort-keys", fields.TypeBool, fields.WithDefault(true), fields.WithHelp("Sort JSON/YAML keys for deterministic output")),
+			fields.New("jobs", fields.TypeStringList, fields.WithHelp("Only process jobs with these names; default all")),
+			fields.New("sections", fields.TypeStringList, fields.WithHelp("Only process sections with these names; default all")),
+			fields.New("force-overwrite", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Overwrite .envrc without prompting")),
+			fields.New("skip-unreadable", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Skip sections that cannot be read; warn instead of failing")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	// attach vault layer
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	// attach vault section
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &BatchCommand{cd}, nil
 }
 
-func (c *BatchCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *BatchCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &BatchSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

@@ -7,8 +7,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/types"
 
@@ -19,11 +20,11 @@ import (
 type TokenCommand struct{ *gcmds.CommandDescription }
 
 type TokenSettings struct {
-	Keys []string `glazed.parameter:"keys"`
+	Keys []string `glazed:"keys"`
 }
 
 func NewTokenCommand() (*TokenCommand, error) {
-	cmdLayer, err := glzcli.NewCommandSettingsLayer()
+	cmdSection, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +33,11 @@ func NewTokenCommand() (*TokenCommand, error) {
 		"token",
 		gcmds.WithShort("Show Vault token details (for templates)"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("keys", parameters.ParameterTypeStringList, parameters.WithHelp("Limit to these keys (default: all)")),
+			fields.New("keys", fields.TypeStringList, fields.WithHelp("Limit to these keys (default: all)")),
 		),
-		gcmds.WithLayersList(cmdLayer),
+		gcmds.WithSections(cmdSection),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
@@ -44,9 +45,9 @@ func NewTokenCommand() (*TokenCommand, error) {
 }
 
 // Glaze-style command producing structured rows
-func (c *TokenCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *glayers.ParsedLayers, gp middlewares.Processor) error {
+func (c *TokenCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *values.Values, gp middlewares.Processor) error {
 	s := &TokenSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

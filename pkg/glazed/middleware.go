@@ -6,41 +6,42 @@ import (
 	"strings"
 	"time"
 
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	gmiddlewares "github.com/go-go-golems/glazed/pkg/cmds/middlewares"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/sources"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vaultlayer"
 )
 
 // UpdateFromVault loads key-value pairs from a Vault secret path and updates
-// matching parameters across all layers. A parameter is updated when a secret
+// matching fields across all sections. A field is updated when a secret
 // with the same name exists at the given path.
 //
 // Typical usage:
 //
-//	middlewares.ExecuteMiddlewares(layers, parsed,
+//	sources.Execute(schema_, parsed,
 //	    glazed.UpdateFromVault("kv/my-app/config",
-//	        parameters.WithParseStepSource("vault"),
+//	        fields.WithSource("vault"),
 //	    ),
-//	    middlewares.SetFromDefaults(parameters.WithParseStepSource("defaults")),
+//	    sources.FromDefaults(fields.WithSource("defaults")),
 //	)
 //
 // Notes:
-//   - Vault connection settings are read from the `vault` layer (see vaultlayer.NewVaultLayer).
+//   - Vault connection settings are read from the `vault` section (see vaultlayer.NewVaultSection).
 //   - The secret path supports Go template expressions using the current token context,
 //     via {{ .Token.* }} values (see vault.BuildTemplateContext).
-func UpdateFromVault(path string, options ...parameters.ParseStepOption) gmiddlewares.Middleware {
-	return func(next gmiddlewares.HandlerFunc) gmiddlewares.HandlerFunc {
-		return func(layers *glayers.ParameterLayers, parsed *glayers.ParsedLayers) error {
+func UpdateFromVault(path string, options ...fields.ParseOption) sources.Middleware {
+	return func(next sources.HandlerFunc) sources.HandlerFunc {
+		return func(schema_ *schema.Schema, parsedValues *values.Values) error {
 			// Run the rest of the chain first; then apply Vault values.
-			if err := next(layers, parsed); err != nil {
+			if err := next(schema_, parsedValues); err != nil {
 				return err
 			}
 
-			// Resolve Vault settings from the parsed layers
-			vs, err := vaultlayer.GetVaultSettings(parsed)
+			// Resolve Vault settings from the parsed values
+			vs, err := vaultlayer.GetVaultSettings(parsedValues)
 			if err != nil {
 				return fmt.Errorf("failed to parse vault settings: %w", err)
 			}
@@ -81,13 +82,13 @@ func UpdateFromVault(path string, options ...parameters.ParseStepOption) gmiddle
 				return fmt.Errorf("failed to retrieve secrets from %s: %w", effectivePath, err)
 			}
 
-			// Update matching parameters across all layers
-			err = layers.ForEachE(func(_ string, l glayers.ParameterLayer) error {
-				parsedLayer := parsed.GetOrCreate(l)
-				pds := l.GetParameterDefinitions()
-				return pds.ForEachE(func(pd *parameters.ParameterDefinition) error {
+			// Update matching fields across all sections
+			err = schema_.ForEachE(func(_ string, s schema.Section) error {
+				sectionVals := parsedValues.GetOrCreate(s)
+				defs := s.GetDefinitions()
+				return defs.ForEachE(func(pd *fields.Definition) error {
 					if v, ok := secrets[pd.Name]; ok {
-						if err := parsedLayer.Parameters.UpdateValue(pd.Name, pd, v, options...); err != nil {
+						if err := sectionVals.Fields.UpdateValue(pd.Name, pd, v, options...); err != nil {
 							return err
 						}
 					}

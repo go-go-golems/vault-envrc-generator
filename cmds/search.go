@@ -11,8 +11,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"github.com/go-go-golems/glazed/pkg/middlewares"
 	"github.com/go-go-golems/glazed/pkg/settings"
 	"github.com/go-go-golems/glazed/pkg/types"
@@ -25,26 +26,26 @@ import (
 type SearchCommand struct{ *gcmds.CommandDescription }
 
 type SearchSettings struct {
-	Path          string   `glazed.parameter:"path"`
-	KeyContains   []string `glazed.parameter:"key-contains"`
-	KeyRegexp     []string `glazed.parameter:"key-regexp"`
-	ValueContains []string `glazed.parameter:"value-contains"`
-	ValueRegexp   []string `glazed.parameter:"value-regexp"`
-	IgnoreCase    bool     `glazed.parameter:"ignore-case"`
-	Depth         int      `glazed.parameter:"depth"`
-	Reveal        bool     `glazed.parameter:"reveal-values"`
-	CensorPrefix  int      `glazed.parameter:"censor-prefix"`
-	CensorSuffix  int      `glazed.parameter:"censor-suffix"`
-	IncludeAudit  bool     `glazed.parameter:"include-audit"`
-	AuditLimit    int      `glazed.parameter:"audit-limit"`
+	Path          string   `glazed:"path"`
+	KeyContains   []string `glazed:"key-contains"`
+	KeyRegexp     []string `glazed:"key-regexp"`
+	ValueContains []string `glazed:"value-contains"`
+	ValueRegexp   []string `glazed:"value-regexp"`
+	IgnoreCase    bool     `glazed:"ignore-case"`
+	Depth         int      `glazed:"depth"`
+	Reveal        bool     `glazed:"reveal-values"`
+	CensorPrefix  int      `glazed:"censor-prefix"`
+	CensorSuffix  int      `glazed:"censor-suffix"`
+	IncludeAudit  bool     `glazed:"include-audit"`
+	AuditLimit    int      `glazed:"audit-limit"`
 }
 
 func NewSearchCommand() (*SearchCommand, error) {
-	glazedLayers, err := settings.NewGlazedParameterLayers()
+	glazedSection, err := settings.NewGlazedSection()
 	if err != nil {
 		return nil, err
 	}
-	commandLayer, err := glzcli.NewCommandSettingsLayer()
+	commandSection, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -53,23 +54,23 @@ func NewSearchCommand() (*SearchCommand, error) {
 		"search",
 		gcmds.WithShort("Search Vault secrets for matching keys or values"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("p"), parameters.WithHelp("Root Vault path to search")),
-			parameters.NewParameterDefinition("key-contains", parameters.ParameterTypeStringList, parameters.WithHelp("Substring filters to match against keys")),
-			parameters.NewParameterDefinition("key-regexp", parameters.ParameterTypeStringList, parameters.WithHelp("Regular expression filters to match against keys")),
-			parameters.NewParameterDefinition("value-contains", parameters.ParameterTypeStringList, parameters.WithHelp("Substring filters to match against values")),
-			parameters.NewParameterDefinition("value-regexp", parameters.ParameterTypeStringList, parameters.WithHelp("Regular expression filters to match against values")),
-			parameters.NewParameterDefinition("ignore-case", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Perform case-insensitive matching")),
-			parameters.NewParameterDefinition("depth", parameters.ParameterTypeInteger, parameters.WithDefault(0), parameters.WithHelp("Maximum recursion depth (0 = unlimited)")),
-			parameters.NewParameterDefinition("reveal-values", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Show full values instead of censored previews")),
-			parameters.NewParameterDefinition("censor-prefix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at the start of censored values")),
-			parameters.NewParameterDefinition("censor-suffix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at the end of censored values")),
-			parameters.NewParameterDefinition("include-audit", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Include KV metadata (audit trail) for matches")),
-			parameters.NewParameterDefinition("audit-limit", parameters.ParameterTypeInteger, parameters.WithDefault(5), parameters.WithHelp("Maximum number of recent versions to display when including audit metadata (0 = all)")),
+			fields.New("path", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("p"), fields.WithHelp("Root Vault path to search")),
+			fields.New("key-contains", fields.TypeStringList, fields.WithHelp("Substring filters to match against keys")),
+			fields.New("key-regexp", fields.TypeStringList, fields.WithHelp("Regular expression filters to match against keys")),
+			fields.New("value-contains", fields.TypeStringList, fields.WithHelp("Substring filters to match against values")),
+			fields.New("value-regexp", fields.TypeStringList, fields.WithHelp("Regular expression filters to match against values")),
+			fields.New("ignore-case", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Perform case-insensitive matching")),
+			fields.New("depth", fields.TypeInteger, fields.WithDefault(0), fields.WithHelp("Maximum recursion depth (0 = unlimited)")),
+			fields.New("reveal-values", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Show full values instead of censored previews")),
+			fields.New("censor-prefix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at the start of censored values")),
+			fields.New("censor-suffix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at the end of censored values")),
+			fields.New("include-audit", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Include KV metadata (audit trail) for matches")),
+			fields.New("audit-limit", fields.TypeInteger, fields.WithDefault(5), fields.WithHelp("Maximum number of recent versions to display when including audit metadata (0 = all)")),
 		),
-		gcmds.WithLayersList(glazedLayers, commandLayer),
+		gcmds.WithSections(glazedSection, commandSection),
 	)
 
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
@@ -77,9 +78,9 @@ func NewSearchCommand() (*SearchCommand, error) {
 	return &SearchCommand{cd}, nil
 }
 
-func (c *SearchCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *glayers.ParsedLayers, gp middlewares.Processor) error {
+func (c *SearchCommand) RunIntoGlazeProcessor(ctx context.Context, parsed *values.Values, gp middlewares.Processor) error {
 	s := &SearchSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

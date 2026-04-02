@@ -7,8 +7,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/diffenv"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/vault"
@@ -18,17 +19,17 @@ import (
 type DiffEnvCommand struct{ *gcmds.CommandDescription }
 
 type DiffEnvSettings struct {
-	SeedPath  string `glazed.parameter:"seed"`
-	BatchPath string `glazed.parameter:"batch"`
-	BasePath  string `glazed.parameter:"base-path"`
-	ShowExtra bool   `glazed.parameter:"show-extra"`
-	Reveal    bool   `glazed.parameter:"reveal-values"`
-	CensorPre int    `glazed.parameter:"censor-prefix"`
-	CensorSuf int    `glazed.parameter:"censor-suffix"`
+	SeedPath  string `glazed:"seed"`
+	BatchPath string `glazed:"batch"`
+	BasePath  string `glazed:"base-path"`
+	ShowExtra bool   `glazed:"show-extra"`
+	Reveal    bool   `glazed:"reveal-values"`
+	CensorPre int    `glazed:"censor-prefix"`
+	CensorSuf int    `glazed:"censor-suffix"`
 }
 
 func NewDiffEnvCommand() (*DiffEnvCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -37,26 +38,26 @@ func NewDiffEnvCommand() (*DiffEnvCommand, error) {
 		"diff-env",
 		gcmds.WithShort("Diff current environment against Vault (seed or batch mapping)"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("seed", parameters.ParameterTypeString, parameters.WithHelp("Seed YAML file to derive env mapping")),
-			parameters.NewParameterDefinition("batch", parameters.ParameterTypeString, parameters.WithHelp("Batch YAML file to derive env mapping")),
-			parameters.NewParameterDefinition("base-path", parameters.ParameterTypeString, parameters.WithHelp("Override base_path for template rendering")),
-			parameters.NewParameterDefinition("show-extra", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Also list env vars not in mapping")),
-			parameters.NewParameterDefinition("reveal-values", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Reveal real values instead of censored")),
-			parameters.NewParameterDefinition("censor-prefix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at start of value when censored")),
-			parameters.NewParameterDefinition("censor-suffix", parameters.ParameterTypeInteger, parameters.WithDefault(2), parameters.WithHelp("Visible characters at end of value when censored")),
+			fields.New("seed", fields.TypeString, fields.WithHelp("Seed YAML file to derive env mapping")),
+			fields.New("batch", fields.TypeString, fields.WithHelp("Batch YAML file to derive env mapping")),
+			fields.New("base-path", fields.TypeString, fields.WithHelp("Override base_path for template rendering")),
+			fields.New("show-extra", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Also list env vars not in mapping")),
+			fields.New("reveal-values", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Reveal real values instead of censored")),
+			fields.New("censor-prefix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at start of value when censored")),
+			fields.New("censor-suffix", fields.TypeInteger, fields.WithDefault(2), fields.WithHelp("Visible characters at end of value when censored")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &DiffEnvCommand{cd}, nil
 }
 
-func (c *DiffEnvCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *DiffEnvCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &DiffEnvSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	if s.SeedPath == "" && s.BatchPath == "" {

@@ -7,8 +7,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/envrc"
 	"github.com/go-go-golems/vault-envrc-generator/pkg/output"
@@ -19,20 +20,20 @@ import (
 type GenerateCommand struct{ *gcmds.CommandDescription }
 
 type GenerateSettings struct {
-	Path          string   `glazed.parameter:"path"`
-	TemplateFile  string   `glazed.parameter:"template"`
-	Prefix        string   `glazed.parameter:"prefix"`
-	ExcludeKeys   []string `glazed.parameter:"exclude"`
-	IncludeKeys   []string `glazed.parameter:"include"`
-	TransformKeys bool     `glazed.parameter:"transform-keys"`
-	DryRun        bool     `glazed.parameter:"dry-run"`
-	Format        string   `glazed.parameter:"format"`
-	Output        string   `glazed.parameter:"output"`
-	SortKeys      bool     `glazed.parameter:"sort-keys"`
+	Path          string   `glazed:"path"`
+	TemplateFile  string   `glazed:"template"`
+	Prefix        string   `glazed:"prefix"`
+	ExcludeKeys   []string `glazed:"exclude"`
+	IncludeKeys   []string `glazed:"include"`
+	TransformKeys bool     `glazed:"transform-keys"`
+	DryRun        bool     `glazed:"dry-run"`
+	Format        string   `glazed:"format"`
+	Output        string   `glazed:"output"`
+	SortKeys      bool     `glazed:"sort-keys"`
 }
 
 func NewGenerateCommand() (*GenerateCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -40,29 +41,29 @@ func NewGenerateCommand() (*GenerateCommand, error) {
 		"generate",
 		gcmds.WithShort("Generate .envrc/json/yaml from a single Vault path"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("p"), parameters.WithHelp("Vault path")),
-			parameters.NewParameterDefinition("template", parameters.ParameterTypeString, parameters.WithHelp("Custom template file")),
-			parameters.NewParameterDefinition("prefix", parameters.ParameterTypeString, parameters.WithHelp("Prefix to add to keys")),
-			parameters.NewParameterDefinition("exclude", parameters.ParameterTypeStringList, parameters.WithHelp("Keys to exclude")),
-			parameters.NewParameterDefinition("include", parameters.ParameterTypeStringList, parameters.WithHelp("Keys to include (overrides exclude)")),
-			parameters.NewParameterDefinition("transform-keys", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Transform keys to UPPER and '-' to '_'")),
-			parameters.NewParameterDefinition("dry-run", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Print to stdout instead of writing")),
-			parameters.NewParameterDefinition("format", parameters.ParameterTypeChoice, parameters.WithChoices("envrc", "json", "yaml"), parameters.WithDefault("envrc"), parameters.WithHelp("Output format")),
-			parameters.NewParameterDefinition("output", parameters.ParameterTypeString, parameters.WithDefault("-"), parameters.WithHelp("Output path or '-' for stdout")),
-			parameters.NewParameterDefinition("sort-keys", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Sort keys in JSON/YAML")),
+			fields.New("path", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("p"), fields.WithHelp("Vault path")),
+			fields.New("template", fields.TypeString, fields.WithHelp("Custom template file")),
+			fields.New("prefix", fields.TypeString, fields.WithHelp("Prefix to add to keys")),
+			fields.New("exclude", fields.TypeStringList, fields.WithHelp("Keys to exclude")),
+			fields.New("include", fields.TypeStringList, fields.WithHelp("Keys to include (overrides exclude)")),
+			fields.New("transform-keys", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Transform keys to UPPER and '-' to '_'")),
+			fields.New("dry-run", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Print to stdout instead of writing")),
+			fields.New("format", fields.TypeChoice, fields.WithChoices("envrc", "json", "yaml"), fields.WithDefault("envrc"), fields.WithHelp("Output format")),
+			fields.New("output", fields.TypeString, fields.WithDefault("-"), fields.WithHelp("Output path or '-' for stdout")),
+			fields.New("sort-keys", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Sort keys in JSON/YAML")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &GenerateCommand{cd}, nil
 }
 
-func (c *GenerateCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *GenerateCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &GenerateSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

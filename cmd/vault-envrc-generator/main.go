@@ -3,10 +3,7 @@ package main
 import (
 	clay "github.com/go-go-golems/clay/pkg"
 	"github.com/go-go-golems/glazed/pkg/cli"
-	"github.com/go-go-golems/glazed/pkg/cmds/layers"
 	"github.com/go-go-golems/glazed/pkg/cmds/logging"
-	"github.com/go-go-golems/glazed/pkg/cmds/middlewares"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
 	"github.com/go-go-golems/glazed/pkg/help"
 	help_cmd "github.com/go-go-golems/glazed/pkg/help/cmd"
 	"github.com/spf13/cobra"
@@ -17,42 +14,18 @@ import (
 
 var version = "dev"
 
-func getMiddlewares(parsedLayers *layers.ParsedLayers, cmd *cobra.Command, args []string) ([]middlewares.Middleware, error) {
-	commandSettings := &cli.CommandSettings{}
-	err := parsedLayers.InitializeStruct(cli.CommandSettingsSlug, commandSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	mw_ := []middlewares.Middleware{
-		middlewares.ParseFromCobraCommand(cmd,
-			parameters.WithParseStepSource("cobra"),
-		),
-		middlewares.GatherArguments(args,
-			parameters.WithParseStepSource("arguments"),
-		),
-	}
-
-	mw_ = append(mw_,
-		middlewares.GatherFlagsFromViper(parameters.WithParseStepSource("viper")),
-		middlewares.SetFromDefaults(parameters.WithParseStepSource("defaults")),
-	)
-
-	return mw_, nil
-}
-
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "vault-envrc-generator",
 		Short:   "Generate envrc and seed Vault via glazed commands",
 		Version: version,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			err := logging.InitLoggerFromViper()
+			err := logging.InitLoggerFromCobra(cmd)
 			cobra.CheckErr(err)
 		},
 	}
 
-	err := clay.InitViper("vault-envrc-generator", rootCmd)
+	err := clay.InitGlazed("vault-envrc-generator", rootCmd)
 	cobra.CheckErr(err)
 
 	// Help system
@@ -62,8 +35,7 @@ func main() {
 
 	opts := []cli.CobraOption{
 		cli.WithParserConfig(cli.CobraParserConfig{
-			// ShortHelpLayers: []string{layers.DefaultSlug},
-			MiddlewaresFunc: getMiddlewares,
+			AppName: "vault-envrc-generator",
 		}),
 	}
 

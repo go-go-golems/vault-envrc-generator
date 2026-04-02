@@ -9,8 +9,9 @@ import (
 
 	glzcli "github.com/go-go-golems/glazed/pkg/cli"
 	gcmds "github.com/go-go-golems/glazed/pkg/cmds"
-	glayers "github.com/go-go-golems/glazed/pkg/cmds/layers"
-	"github.com/go-go-golems/glazed/pkg/cmds/parameters"
+	"github.com/go-go-golems/glazed/pkg/cmds/fields"
+	"github.com/go-go-golems/glazed/pkg/cmds/schema"
+	"github.com/go-go-golems/glazed/pkg/cmds/values"
 	"gopkg.in/yaml.v3"
 
 	"github.com/go-go-golems/vault-envrc-generator/pkg/listing"
@@ -33,13 +34,13 @@ func askForConfirmation(prompt string) bool {
 type RmTreeCommand struct{ *gcmds.CommandDescription }
 
 type RmTreeSettings struct {
-	Path  string `glazed.parameter:"path"`
-	Depth int    `glazed.parameter:"depth"`
-	Yes   bool   `glazed.parameter:"yes"`
+	Path  string `glazed:"path"`
+	Depth int    `glazed:"depth"`
+	Yes   bool   `glazed:"yes"`
 }
 
 func NewRmTreeCommand() (*RmTreeCommand, error) {
-	layer, err := glzcli.NewCommandSettingsLayer()
+	section, err := glzcli.NewCommandSettingsSection()
 	if err != nil {
 		return nil, err
 	}
@@ -47,22 +48,22 @@ func NewRmTreeCommand() (*RmTreeCommand, error) {
 		"rm-tree",
 		gcmds.WithShort("Print a Vault tree and delete all leaves under it after confirmation"),
 		gcmds.WithFlags(
-			parameters.NewParameterDefinition("path", parameters.ParameterTypeString, parameters.WithRequired(true), parameters.WithShortFlag("p"), parameters.WithHelp("Root Vault path to delete")),
-			parameters.NewParameterDefinition("depth", parameters.ParameterTypeInteger, parameters.WithDefault(0), parameters.WithHelp("Max depth to scan before delete (0 = unlimited)")),
-			parameters.NewParameterDefinition("yes", parameters.ParameterTypeBool, parameters.WithDefault(false), parameters.WithHelp("Skip confirmation prompt and delete immediately")),
+			fields.New("path", fields.TypeString, fields.WithRequired(true), fields.WithShortFlag("p"), fields.WithHelp("Root Vault path to delete")),
+			fields.New("depth", fields.TypeInteger, fields.WithDefault(0), fields.WithHelp("Max depth to scan before delete (0 = unlimited)")),
+			fields.New("yes", fields.TypeBool, fields.WithDefault(false), fields.WithHelp("Skip confirmation prompt and delete immediately")),
 		),
-		gcmds.WithLayersList(layer),
+		gcmds.WithSections(section),
 	)
-	_, err = vaultlayer.AddVaultLayerToCommand(cd)
+	_, err = vaultlayer.AddVaultSectionToCommand(cd)
 	if err != nil {
 		return nil, err
 	}
 	return &RmTreeCommand{cd}, nil
 }
 
-func (c *RmTreeCommand) Run(ctx context.Context, parsed *glayers.ParsedLayers) error {
+func (c *RmTreeCommand) Run(ctx context.Context, parsed *values.Values) error {
 	s := &RmTreeSettings{}
-	if err := parsed.InitializeStruct(glayers.DefaultSlug, s); err != nil {
+	if err := parsed.DecodeSectionInto(schema.DefaultSlug, s); err != nil {
 		return err
 	}
 	vs, err := vaultlayer.GetVaultSettings(parsed)

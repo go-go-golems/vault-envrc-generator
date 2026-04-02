@@ -1,9 +1,9 @@
 module github.com/go-go-golems/vault-envrc-generator
 
-go 1.25.0
+go 1.25.7
 
 require (
-	github.com/go-go-golems/clay v0.1.47
+	github.com/go-go-golems/clay v0.4.0
 	github.com/go-go-golems/glazed v1.0.6
 	github.com/hashicorp/vault/api v1.20.0
 	github.com/rs/zerolog v1.34.0

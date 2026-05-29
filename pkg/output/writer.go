@@ -177,7 +177,7 @@ func Write(path string, content []byte, opts WriteOptions) error {
 		return nil
 	default:
 		// For envrc and other text formats, append content
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open output file %s: %w", path, err)
 		}

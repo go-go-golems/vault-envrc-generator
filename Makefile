@@ -57,3 +57,11 @@ VAULT_BINARY=$(shell which vault-envrc-generator)
 install:
 	go build -tags fts5 -o ./dist/vault-envrc-generator ./cmd/vault-envrc-generator && \
 		cp ./dist/vault-envrc-generator $(VAULT_BINARY)
+
+.PHONY: logcopter-generate
+logcopter-generate:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator ./cmd/... ./pkg/...
+
+.PHONY: logcopter-check
+logcopter-check:
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator -check ./cmd/... ./pkg/...

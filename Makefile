@@ -64,7 +64,7 @@ logcopter-generate:
 
 .PHONY: logcopter-check
 logcopter-check:
-	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator -check ./cmd/... ./pkg/...
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator -check ./cmd/... ./cmds/... ./pkg/...
 
 GLAZED_LINT_BIN ?= /tmp/glazed-lint
 GLAZED_LINT_PKG ?= github.com/go-go-golems/glazed/cmd/tools/glazed-lint

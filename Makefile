@@ -60,7 +60,7 @@ install:
 
 .PHONY: logcopter-generate
 logcopter-generate:
-	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator ./cmd/... ./pkg/...
+	GOWORK=off go tool logcopter-gen -include-main -var zlog -area-prefix go-go-golems.vault-envrc-generator -strip-prefix github.com/go-go-golems/vault-envrc-generator ./cmd/... ./cmds/... ./pkg/...
 
 .PHONY: logcopter-check
 logcopter-check:
